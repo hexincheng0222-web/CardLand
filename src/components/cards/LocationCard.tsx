@@ -108,26 +108,30 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
             onClick={card.onClick}
             disabled={!card.available || !card.onClick}
           >
-            <span className={styles.cardIcon}>{card.icon}</span>
-            <span className={styles.cardLabel}>{card.label}</span>
-            <span className={styles.cardSubLabel}>{card.subLabel}</span>
+            <div className={styles.cardTop}>
+              <span className={styles.cardIcon}>{card.icon}</span>
+              <span className={styles.cardLabel}>{card.label}</span>
+              <span className={styles.cardSubLabel}>{card.subLabel}</span>
+            </div>
             {card.actions.length > 0 && (
-              <span className={styles.actions}>
-                {card.actions.map((action) => (
-                  <span
-                    key={action.label}
-                    className={styles.actionBtn}
-                    role="button"
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      action.onClick?.();
-                    }}
-                  >
-                    {action.label}
-                  </span>
-                ))}
-              </span>
+              <div className={styles.cardBottom}>
+                <span className={styles.actions}>
+                  {card.actions.map((action) => (
+                    <span
+                      key={action.label}
+                      className={styles.actionBtn}
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        action.onClick?.();
+                      }}
+                    >
+                      {action.label}
+                    </span>
+                  ))}
+                </span>
+              </div>
             )}
           </button>
         ))}

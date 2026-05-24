@@ -52,16 +52,28 @@ export function GuideCraftingCard({ attributes, recipes, survivalStatus }: Guide
 
   return (
     <Card className={styles.card}>
-      <div className={styles.header}>📊 生存指南</div>
+      <div className={styles.header}>
+        📊 生存指南
+        {survivalStatus && <span className={styles.statusDot}> · {survivalStatus}</span>}
+      </div>
 
       <div className={styles.attrGrid}>
         {attributes.map((attr) => {
           const color = getThresholdColor(attr.current, attr.max, attr.isNegativeWhenHigh);
+          const pct = Math.max(0, Math.min(100, (attr.current / attr.max) * 100));
           return (
-            <span key={attr.name} className={`${styles.attrItem} ${styles[color]}`}>
+            <div key={attr.name} className={styles.attrRow}>
               <span className={styles.attrIcon}>{attr.icon}</span>
-              <span className={styles.attrValue}>{attr.current}</span>
-            </span>
+              <div className={styles.attrTrack}>
+                <div
+                  className={`${styles.attrBar} ${styles[color]}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className={styles.attrText}>
+                {attr.current}/{attr.max}
+              </span>
+            </div>
           );
         })}
       </div>
@@ -72,7 +84,7 @@ export function GuideCraftingCard({ attributes, recipes, survivalStatus }: Guide
           className={styles.btn}
           onClick={() => setActivePopup('crafting')}
         >
-          🔨 制作{survivalStatus ? <span className={styles.statusLabel}>{survivalStatus}</span> : null}
+          🔨 制作
         </button>
       </div>
 
