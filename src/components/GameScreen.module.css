@@ -1,0 +1,158 @@
+/* ============================================================
+   GameScreen Layout — Left sidebar + Right main area
+   Design tokens from index.css
+   ============================================================ */
+
+/* ── Root layout ── */
+.screen {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+/* ── Left Sidebar (sticky, scrollable) ── */
+.sidebar {
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+}
+
+/* ── Right Main Area (scrollable) ── */
+.main {
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Section headings in the right area ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ── Save button (floating in bottom-right of sidebar) ── */
+.saveButton {
+  position: sticky;
+  bottom: var(--space-3);
+  margin-top: auto;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+  text-align: center;
+}
+
+.saveButton:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background: var(--bg-card-hover);
+}
+
+/* ── Overlay backdrop ── */
+.overlayBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-6);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.65);
+  animation: overlayFadeIn 150ms ease;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overlayContent {
+  width: 100%;
+  max-width: 720px;
+  animation: overlaySlideUp 200ms ease;
+}
+
+@keyframes overlaySlideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ── Game Over overlay ── */
+.gameOverOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  background: rgba(0, 0, 0, 0.85);
+  animation: overlayFadeIn 300ms ease;
+}
+
+.gameOverTitle {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-red);
+}
+
+.gameOverReason {
+  font-size: var(--text-md);
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 400px;
+}
+
+.gameOverRestart {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-8);
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-base), box-shadow var(--transition-base);
+}
+
+.gameOverRestart:hover {
+  background: var(--accent-secondary);
+  box-shadow: var(--glow-active);
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .screen {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    height: auto;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .main {
+    height: auto;
+  }
+}

@@ -1,0 +1,114 @@
+/* ============================================================
+   CardLand Design System
+   ============================================================ */
+
+:root {
+  /* Backgrounds */
+  --bg-base: #0c0c14;
+  --bg-card: #141420;
+  --bg-card-hover: #1a1a2e;
+  --bg-elevated: #1e1e36;
+  --bg-input: #0f0f1c;
+
+  /* Borders */
+  --border-subtle: rgba(100, 100, 160, 0.15);
+  --border-default: rgba(100, 100, 160, 0.25);
+  --border-strong: rgba(100, 100, 160, 0.4);
+  --border-glow: rgba(120, 120, 200, 0.3);
+
+  /* Text */
+  --text-primary: #e8e8f0;
+  --text-secondary: #a0a0b8;
+  --text-muted: #6e6e8a;
+  --text-inverse: #0c0c14;
+
+  /* Accents */
+  --accent-primary: #7c7cff;
+  --accent-secondary: #a78bfa;
+  --accent-glow: rgba(124, 124, 255, 0.25);
+
+  /* Threshold Colors */
+  --color-green: #4ade80;
+  --color-green-dim: rgba(74, 222, 128, 0.15);
+  --color-yellow: #facc15;
+  --color-yellow-dim: rgba(250, 204, 21, 0.15);
+  --color-red: #f87171;
+  --color-red-dim: rgba(248, 113, 113, 0.15);
+
+  /* Status Glows */
+  --glow-active: 0 0 12px rgba(124, 124, 255, 0.4);
+  --glow-green: 0 0 10px rgba(74, 222, 128, 0.35);
+  --glow-yellow: 0 0 10px rgba(250, 204, 21, 0.35);
+  --glow-red: 0 0 10px rgba(248, 113, 113, 0.35);
+
+  /* Spacing Scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Layout */
+  --sidebar-width: 280px;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

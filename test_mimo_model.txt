@@ -1,0 +1,7 @@
+# Mimo Model Test
+
+This is a simple test file to verify model availability and functionality.
+
+## Test Summary
+- Created: Sun May 24 2026
+- Purpose: Verify mimo/mimo-v2.5-pro model is operational

@@ -1,0 +1,67 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.icon {
+  font-size: var(--text-md);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.name {
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.max {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.track {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow), background-color var(--transition-base);
+}
+
+.green {
+  background: var(--color-green);
+  box-shadow: 0 0 6px var(--color-green-dim);
+}
+
+.yellow {
+  background: var(--color-yellow);
+  box-shadow: 0 0 6px var(--color-yellow-dim);
+}
+
+.red {
+  background: var(--color-red);
+  box-shadow: 0 0 6px var(--color-red-dim);
+}

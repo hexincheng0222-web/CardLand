@@ -1,0 +1,94 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.heading {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.recipes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.recipe {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color var(--transition-fast);
+}
+
+.recipe:hover {
+  border-color: var(--border-default);
+}
+
+.product {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.productIcon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.productName {
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.time {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.ingredients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ingredient {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg-card);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.ingIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ingName {
+  color: var(--text-secondary);
+}
+
+.ingQty {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.station {
+  font-size: var(--text-xs);
+  color: var(--color-yellow);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+}
