@@ -66,10 +66,12 @@ export function GameScreen() {
   const gamePhase = useGameStore((s) => s.gamePhase);
   const resetGame = useGameStore((s) => s.resetGame);
   const setGamePhase = useGameStore((s) => s.setGamePhase);
+  const processAction = useGameStore((s) => s.processAction);
 
   const attributes = usePlayerStore((s) => s.attributes);
   const inventory = usePlayerStore((s) => s.inventory);
   const statusEffects = usePlayerStore((s) => s.statusEffects);
+  const useItem = usePlayerStore((s) => s.useItem);
 
   const currentSubZone = useMapStore((s) => s.currentSubZone);
 
@@ -265,10 +267,45 @@ export function GameScreen() {
     setGamePhase('exploration');
   }, [setGamePhase]);
 
-  const handleDirectionClick = useCallback((_direction: string) => {
-    // Movement is handled by the game engine via processAction;
-    // this is a UI hook for future direction-click integration.
-  }, []);
+  const foodCount = useMemo(
+    () => inventory.find((s) => s.itemId === '食物')?.quantity ?? 0,
+    [inventory],
+  );
+
+  const waterCount = useMemo(
+    () => inventory.find((s) => s.itemId === '水')?.quantity ?? 0,
+    [inventory],
+  );
+
+  const handleEat = useCallback(() => {
+    if (foodCount > 0) useItem('食物');
+  }, [foodCount, useItem]);
+
+  const handleDrink = useCallback(() => {
+    if (waterCount > 0) useItem('水');
+  }, [waterCount, useItem]);
+
+  const handleExplore = useCallback(() => {
+    if (gamePhase !== 'exploration') return;
+    processAction({ type: 'gather' });
+  }, [gamePhase, processAction]);
+
+  const handleRest = useCallback(() => {
+    if (gamePhase !== 'exploration') return;
+    processAction({ type: 'rest' });
+  }, [gamePhase, processAction]);
+
+  const handleDirectionClick = useCallback(
+    (direction: string) => {
+      if (gamePhase !== 'exploration') return;
+      const subZonePoints = getMapPointsBySubZone(currentSubZone);
+      const targetPoint = subZonePoints.find((p) => p.direction === direction);
+      if (targetPoint) {
+        processAction({ type: 'gather' });
+      }
+    },
+    [gamePhase, currentSubZone, processAction],
+  );
 
   const handleMapClick = useCallback(() => {
     // Map overlay integration point — not in scope for layout.
@@ -293,6 +330,10 @@ export function GameScreen() {
           maxHp={100}
           weight={weight}
           maxWeight={maxWeight}
+          foodCount={foodCount}
+          waterCount={waterCount}
+          onEat={handleEat}
+          onDrink={handleDrink}
         />
         <StatusIconPanel statuses={statusIconPanelData} />
         <SurvivalStatusCard
@@ -314,6 +355,8 @@ export function GameScreen() {
             directions={locationData.directions}
             onDirectionClick={handleDirectionClick}
             onMapClick={handleMapClick}
+            onExplore={handleExplore}
+            onRest={handleRest}
           />
         </section>
 

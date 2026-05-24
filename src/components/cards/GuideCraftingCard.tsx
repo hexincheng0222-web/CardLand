@@ -3,6 +3,15 @@ import { Card } from '../Card';
 import { AttributeBar } from '../AttributeBar';
 import styles from './GuideCraftingCard.module.css';
 
+const SURVIVAL_KEYS = ['健康', '饱食', '口渴', '体力'];
+
+function getThresholdColor(value: number, max: number): string {
+  const ratio = value / max;
+  if (ratio >= 0.61) return 'green';
+  if (ratio >= 0.31) return 'yellow';
+  return 'red';
+}
+
 export interface GuideCraftingCardProps {
   attributes: {
     icon: string;
@@ -38,25 +47,38 @@ export function GuideCraftingCard({ attributes, recipes }: GuideCraftingCardProp
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [activePopup, closePopup]);
 
+  const survivalAttrs = attributes.filter((a) => SURVIVAL_KEYS.includes(a.name));
+
   return (
     <Card className={styles.card}>
-      <div className={styles.grid}>
+      <div className={styles.header}>📊 生存指南</div>
+
+      <div className={styles.attrRow}>
+        {survivalAttrs.map((attr) => {
+          const color = getThresholdColor(attr.current, attr.max);
+          return (
+            <span key={attr.name} className={`${styles.attrItem} ${styles[color]}`}>
+              <span className={styles.attrIcon}>{attr.icon}</span>
+              <span className={styles.attrValue}>{attr.current}</span>
+            </span>
+          );
+        })}
+      </div>
+
+      <div className={styles.btnRow}>
         <button
           type="button"
-          className={styles.subCard}
+          className={styles.btn}
           onClick={() => setActivePopup('guide')}
         >
-          <span className={styles.subIcon}>🛡️</span>
-          <span className={styles.subLabel}>生存指南</span>
+          🛡️ 查看全部
         </button>
-
         <button
           type="button"
-          className={styles.subCard}
+          className={styles.btn}
           onClick={() => setActivePopup('crafting')}
         >
-          <span className={styles.subIcon}>🔨</span>
-          <span className={styles.subLabel}>制作</span>
+          🔨 制作
         </button>
       </div>
 

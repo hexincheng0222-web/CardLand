@@ -674,23 +674,6 @@ describe('applyStatusEffects', () => {
     });
   });
 
-  // ── 灼伤 ──
-  describe('灼伤 (damage -8/turn, 2 turns)', () => {
-    it('applies -8 health per turn', () => {
-      const attrs = defaultAttributes();
-      const statuses: ActiveStatusEffect[] = [{ id: '灼伤', remainingDuration: 2 }];
-      const result = applyStatusEffects(attrs, statuses);
-      expect(result.attributes['健康值']).toBe(92);
-    });
-
-    it('expires after 2 turns', () => {
-      const attrs = defaultAttributes();
-      const statuses: ActiveStatusEffect[] = [{ id: '灼伤', remainingDuration: 1 }];
-      const result = applyStatusEffects(attrs, statuses);
-      expect(result.statusEffects).toHaveLength(0);
-    });
-  });
-
   // ── 迷路 ──
   describe('迷路 (damage -10/turn, 1 turn)', () => {
     it('applies -10 health per turn', () => {
@@ -720,15 +703,14 @@ describe('applyStatusEffects', () => {
       expect(result.attributes['健康值']).toBe(85);
     });
 
-    it('中毒 + 感染 + 灼伤 = combined -23 health/turn', () => {
+    it('中毒 + 感染 = combined -15 health/turn', () => {
       const attrs = defaultAttributes();
       const statuses: ActiveStatusEffect[] = [
         { id: '中毒', remainingDuration: 3 },
         { id: '感染', remainingDuration: 5 },
-        { id: '灼伤', remainingDuration: 2 },
       ];
       const result = applyStatusEffects(attrs, statuses);
-      expect(result.attributes['健康值']).toBe(77);
+      expect(result.attributes['健康值']).toBe(85);
     });
 
     it('all statuses decrement independently', () => {
@@ -766,11 +748,13 @@ describe('applyStatusEffects', () => {
       expect(result.statusEffects[0].remainingDuration).toBeNull();
     });
 
-    it('沮丧 does not expire by turn count', () => {
+    it('疲惫 persists (does not expire by turn count)', () => {
       const attrs = defaultAttributes();
-      const statuses: ActiveStatusEffect[] = [{ id: '沮丧', remainingDuration: null }];
+      const statuses: ActiveStatusEffect[] = [{ id: '疲惫', remainingDuration: null }];
       const result = applyStatusEffects(attrs, statuses);
       expect(result.statusEffects).toHaveLength(1);
+      expect(result.statusEffects[0].id).toBe('疲惫');
+      expect(result.statusEffects[0].remainingDuration).toBeNull();
     });
 
     it('防护 has no damage per turn', () => {

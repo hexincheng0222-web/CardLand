@@ -8,9 +8,24 @@ export interface CharacterCardProps {
   maxHp: number;
   weight: number;
   maxWeight: number;
+  foodCount?: number;
+  waterCount?: number;
+  onEat?: () => void;
+  onDrink?: () => void;
 }
 
-export function CharacterCard({ name, avatarEmoji, hp, maxHp, weight, maxWeight }: CharacterCardProps) {
+export function CharacterCard({
+  name,
+  avatarEmoji,
+  hp,
+  maxHp,
+  weight,
+  maxWeight,
+  foodCount = 0,
+  waterCount = 0,
+  onEat,
+  onDrink,
+}: CharacterCardProps) {
   const hpPercent = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const weightPercent = Math.max(0, Math.min(100, (weight / maxWeight) * 100));
 
@@ -39,6 +54,22 @@ export function CharacterCard({ name, avatarEmoji, hp, maxHp, weight, maxWeight 
               </div>
               <span className={styles.barValue}>{weight}/{maxWeight}</span>
             </div>
+          </div>
+          <div className={styles.actions}>
+            <button
+              className={`${styles.actionBtn} ${foodCount === 0 ? styles.actionBtnDisabled : ''}`}
+              disabled={foodCount === 0}
+              onClick={onEat}
+            >
+              🍖 进食
+            </button>
+            <button
+              className={`${styles.actionBtn} ${waterCount === 0 ? styles.actionBtnDisabled : ''}`}
+              disabled={waterCount === 0}
+              onClick={onDrink}
+            >
+              💧 饮水
+            </button>
           </div>
         </div>
       </div>

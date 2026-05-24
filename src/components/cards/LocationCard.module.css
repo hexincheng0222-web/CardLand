@@ -81,3 +81,27 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+.actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.actionBtn {
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-glow);
+}

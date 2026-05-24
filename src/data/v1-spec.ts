@@ -140,6 +140,22 @@ export const ITEMS: ItemDef[] = [
   { id: '工具', name: '工具', icon: '🔧', category: '特殊', weight: 5, stackLimit: 1, description: '随机成品工具（探索获得）' },
   { id: '藏宝图', name: '藏宝图', icon: '🗺️', category: '特殊', weight: 1, stackLimit: 1, description: '解锁隐藏点位（一次性）' },
   { id: '渔网', name: '渔网', icon: '🥅', category: '特殊', weight: 3, stackLimit: 1, description: '制作捕鱼陷阱（可修理）' },
+  // 装备
+  { id: '石刀', name: '石刀', icon: '🔪', category: '装备', weight: 3, stackLimit: 1, description: '基础武器，攻击力+5' },
+  { id: '木矛', name: '木矛', icon: '📌', category: '装备', weight: 4, stackLimit: 1, description: '投射武器，攻击力+5可投掷' },
+  { id: '布甲', name: '布甲', icon: '👕', category: '装备', weight: 3, stackLimit: 1, description: '基础护甲，防御力+5' },
+  { id: '皮甲', name: '皮甲', icon: '🛡️', category: '装备', weight: 5, stackLimit: 1, description: '进阶护甲，防御力+10' },
+  // 工具
+  { id: '火把', name: '火把', icon: '🔥', category: '工具', weight: 2, stackLimit: 3, description: '照明5回合，洞穴探索必备' },
+  { id: '修理工具', name: '修理工具', icon: '🔧', category: '工具', weight: 2, stackLimit: 3, description: '修复任意工具+10耐久' },
+  { id: '木筏', name: '木筏', icon: '🛶', category: '工具', weight: 0, stackLimit: 1, description: '解锁浅海探索' },
+  { id: '捕鱼陷阱', name: '捕鱼陷阱', icon: '🎣', category: '工具', weight: 0, stackLimit: 1, description: '鱼产量+1，自动捕鱼' },
+  // 建筑
+  { id: '简易营地', name: '简易营地', icon: '🏕️', category: '建筑', weight: 0, stackLimit: 1, description: '休息恢复体力+40%，精力+20' },
+  { id: '工作台', name: '工作台', icon: '🔨', category: '建筑', weight: 0, stackLimit: 1, description: '解锁高级制作配方' },
+  // 药剂
+  { id: '药膏', name: '药膏', icon: '💊', category: '药剂', weight: 1, stackLimit: 5, description: '治疗感染，健康+10' },
+  { id: '解毒剂', name: '解毒剂', icon: '🧪', category: '药剂', weight: 1, stackLimit: 5, description: '立即解除中毒' },
 ] as const;
 
 // ============================================================
@@ -148,25 +164,20 @@ export const ITEMS: ItemDef[] = [
 
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // Tier 0 - 空手可做
-  { productId: '绳索', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 3 }], station: 'none', craftingTime: 1 },
-  { productId: '工具', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '石材', quantity: 1 }], station: 'none', craftingTime: 2, durability: 15, effect: '攻击力+5' },
-  { productId: '布料', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 2 }], station: 'none', craftingTime: 1 },
-  // 工具类
-  { productId: '工具', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', craftingTime: 2, durability: 8, effect: '攻击力+5，可投掷' },
-  // 防具类
-  { productId: '布料', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', craftingTime: 1, durability: 10, effect: '防御力+5' },
-  // 消耗品类
-  { productId: '草药', productQuantity: 1, ingredients: [{ itemId: '草药', quantity: 2 }], station: 'none', craftingTime: 1, effect: '治疗感染，健康+10' },
-  { productId: '解毒草', productQuantity: 1, ingredients: [{ itemId: '解毒草', quantity: 1 }], station: 'none', craftingTime: 1, effect: '立即解除中毒' },
-  { productId: '工具', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 1 }, { itemId: '纤维', quantity: 2 }], station: 'none', craftingTime: 1, durability: 5, effect: '照明5回合，洞穴探索必备' },
-  // 建筑类
-  { productId: '工具', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 4 }, { itemId: '纤维', quantity: 2 }], station: 'none', craftingTime: 1, effect: '休息恢复体力+40%，精力+20' },
+  { productId: '绳索', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 3 }], station: 'none', craftingTime: 1, effect: '基础攀爬材料' },
+  { productId: '石刀', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '石材', quantity: 1 }], station: 'none', craftingTime: 2, durability: 15, effect: '攻击力+5' },
+  { productId: '木矛', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', craftingTime: 2, durability: 8, effect: '攻击力+5，可投掷' },
+  { productId: '火把', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 1 }, { itemId: '纤维', quantity: 2 }], station: 'none', craftingTime: 1, durability: 5, effect: '照明5回合' },
+  { productId: '布甲', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', craftingTime: 1, durability: 10, effect: '防御力+5' },
+  { productId: '简易营地', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 4 }, { itemId: '纤维', quantity: 2 }], station: 'none', craftingTime: 3, effect: '休息体力+40%，精力+20' },
+  { productId: '药膏', productQuantity: 1, ingredients: [{ itemId: '草药', quantity: 2 }], station: 'none', craftingTime: 1, effect: '治疗感染，健康+10' },
+  { productId: '解毒剂', productQuantity: 1, ingredients: [{ itemId: '解毒草', quantity: 1 }], station: 'none', craftingTime: 1, effect: '立即解除中毒' },
   // Tier 1 - 需要工作台
-  { productId: '布料', productQuantity: 1, ingredients: [{ itemId: '布料', quantity: 2 }, { itemId: '纤维', quantity: 2 }], station: 'workbench', craftingTime: 2, durability: 25, effect: '防御力+10' },
-  { productId: '工具', productQuantity: 1, ingredients: [{ itemId: '铁矿', quantity: 2 }, { itemId: '纤维', quantity: 1 }], station: 'workbench', craftingTime: 2, durability: 5, effect: '修复任意工具+10耐久' },
-  { productId: '工具', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '金属件', quantity: 1 }], station: 'workbench', craftingTime: 2, effect: '休息恢复体力+60%，精力+30，防风雨' },
-  { productId: '绳索', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '绳索', quantity: 2 }], station: 'workbench', craftingTime: 3, effect: '解锁浅海探索' },
-  { productId: '渔网', productQuantity: 1, ingredients: [{ itemId: '渔网', quantity: 1 }, { itemId: '木材', quantity: 1 }], station: 'workbench', craftingTime: 2, durability: 10, effect: '鱼产量+1，自动捕鱼' },
+  { productId: '皮甲', productQuantity: 1, ingredients: [{ itemId: '布料', quantity: 2 }, { itemId: '纤维', quantity: 2 }], station: 'workbench', craftingTime: 2, durability: 25, effect: '防御力+10' },
+  { productId: '修理工具', productQuantity: 1, ingredients: [{ itemId: '铁矿', quantity: 2 }, { itemId: '纤维', quantity: 1 }], station: 'workbench', craftingTime: 2, durability: 5, effect: '修复工具+10耐久' },
+  { productId: '工作台', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '金属件', quantity: 1 }], station: 'workbench', craftingTime: 2, effect: '解锁Tier1制作' },
+  { productId: '木筏', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '绳索', quantity: 2 }], station: 'workbench', craftingTime: 3, effect: '解锁浅海探索' },
+  { productId: '捕鱼陷阱', productQuantity: 1, ingredients: [{ itemId: '渔网', quantity: 1 }, { itemId: '木材', quantity: 1 }], station: 'workbench', craftingTime: 2, durability: 10, effect: '鱼产量+1，自动捕鱼' },
 ] as const;
 
 // ============================================================
@@ -188,10 +199,8 @@ export const STATUS_EFFECTS: StatusEffectDef[] = [
   // 负面状态
   { id: '中毒', name: '中毒', icon: '☠️', isNegative: true, duration: 3, damagePerTurn: -10, source: '蛇咬、水母蜇、硫磺毒气、沼气、腐败食物', effectDescription: '每回合健康 -10，持续 3 回合', removalMethods: ['解毒草×1 立即解除'] },
   { id: '感染', name: '感染', icon: '🩹', isNegative: true, duration: 5, damagePerTurn: -5, source: '伤口未处理、腐烂椰堆蚊虫、蝙蝠、污垢>80', effectDescription: '每回合健康 -5，持续 5 回合', removalMethods: ['草药×1 立即解除'] },
-  { id: '灼伤', name: '灼伤', icon: '🔥', isNegative: true, duration: 2, damagePerTurn: -8, source: '火山热气喷口、熔岩管、蒸汽裂口', effectDescription: '每回合健康 -8，持续 2 回合', removalMethods: ['草药×1', '温泉'] },
   { id: '迷路', name: '迷路', icon: '🌫️', isNegative: true, duration: 1, damagePerTurn: -10, source: '迷雾沼泽、丛林深处', effectDescription: '本回合无法移动，体力 -10', removalMethods: ['藏宝图/指南针或休息'] },
-  { id: '疲惫', name: '疲惫', icon: '😫', isNegative: true, duration: null, damagePerTurn: 0, source: '精力归零持续3回合', effectDescription: '精力消耗翻倍，行动力 -30%', removalMethods: ['休息点休息'] },
-  { id: '沮丧', name: '沮丧', icon: '😞', isNegative: true, duration: null, damagePerTurn: 0, source: '心情归零持续2回合', effectDescription: '心情不再自然恢复，产出 -20%', removalMethods: ['发现稀有物资或休息+美食'] },
+  { id: '疲惫', name: '疲惫', icon: '😫', isNegative: true, duration: null, damagePerTurn: 0, source: '精力归零或心情归零', effectDescription: '消耗+50%，产出-20%', removalMethods: ['休息点休息'] },
   // 正面状态
   { id: '饱腹', name: '饱腹', icon: '😋', isNegative: false, duration: null, damagePerTurn: 0, source: '饱食度>80', effectDescription: '每回合体力恢复 +5', removalMethods: ['饱食度≤80时自动解除'] },
   { id: '精神饱满', name: '精神饱满', icon: '✨', isNegative: false, duration: 1, damagePerTurn: 0, source: '充分休息', effectDescription: '本回合体力消耗减半', removalMethods: ['1回合后自动解除'] },

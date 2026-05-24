@@ -12,9 +12,11 @@ export interface LocationCardProps {
   };
   onDirectionClick?: (direction: string) => void;
   onMapClick?: () => void;
+  onExplore?: () => void;
+  onRest?: () => void;
 }
 
-export function LocationCard({ currentLocation, locationIcon, directions, onDirectionClick, onMapClick }: LocationCardProps) {
+export function LocationCard({ currentLocation, locationIcon, directions, onDirectionClick, onMapClick, onExplore, onRest }: LocationCardProps) {
   const cards = [
     {
       key: 'current',
@@ -23,6 +25,10 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
       subLabel: '当前位置',
       available: true,
       onClick: undefined,
+      actions: [
+        { label: '⛏️探索', onClick: onExplore },
+        { label: '🏕️休息', onClick: onRest },
+      ],
     },
     {
       key: 'north',
@@ -31,6 +37,12 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
       subLabel: '北',
       available: !!directions.north,
       onClick: () => onDirectionClick?.('north'),
+      actions: !!directions.north
+        ? [
+            { label: '⛏️探索', onClick: onExplore },
+            { label: '🚶前往', onClick: () => onDirectionClick?.('north') },
+          ]
+        : [],
     },
     {
       key: 'south',
@@ -39,6 +51,12 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
       subLabel: '南',
       available: !!directions.south,
       onClick: () => onDirectionClick?.('south'),
+      actions: !!directions.south
+        ? [
+            { label: '⛏️探索', onClick: onExplore },
+            { label: '🚶前往', onClick: () => onDirectionClick?.('south') },
+          ]
+        : [],
     },
     {
       key: 'east',
@@ -47,6 +65,12 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
       subLabel: '东',
       available: !!directions.east,
       onClick: () => onDirectionClick?.('east'),
+      actions: !!directions.east
+        ? [
+            { label: '⛏️探索', onClick: onExplore },
+            { label: '🚶前往', onClick: () => onDirectionClick?.('east') },
+          ]
+        : [],
     },
     {
       key: 'west',
@@ -55,6 +79,12 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
       subLabel: '西',
       available: !!directions.west,
       onClick: () => onDirectionClick?.('west'),
+      actions: !!directions.west
+        ? [
+            { label: '⛏️探索', onClick: onExplore },
+            { label: '🚶前往', onClick: () => onDirectionClick?.('west') },
+          ]
+        : [],
     },
     {
       key: 'map',
@@ -63,6 +93,7 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
       subLabel: '查看全貌',
       available: true,
       onClick: onMapClick,
+      actions: [],
     },
   ];
 
@@ -80,6 +111,24 @@ export function LocationCard({ currentLocation, locationIcon, directions, onDire
             <span className={styles.cardIcon}>{card.icon}</span>
             <span className={styles.cardLabel}>{card.label}</span>
             <span className={styles.cardSubLabel}>{card.subLabel}</span>
+            {card.actions.length > 0 && (
+              <span className={styles.actions}>
+                {card.actions.map((action) => (
+                  <span
+                    key={action.label}
+                    className={styles.actionBtn}
+                    role="button"
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      action.onClick?.();
+                    }}
+                  >
+                    {action.label}
+                  </span>
+                ))}
+              </span>
+            )}
           </button>
         ))}
       </div>

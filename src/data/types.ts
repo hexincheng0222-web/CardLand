@@ -44,13 +44,25 @@ export type ItemId =
   | '高级材料'
   | '工具'
   | '藏宝图'
-  | '渔网';
+  | '渔网'
+  | '石刀'
+  | '木矛'
+  | '布甲'
+  | '皮甲'
+  | '火把'
+  | '修理工具'
+  | '简易营地'
+  | '工作台'
+  | '药膏'
+  | '解毒剂'
+  | '木筏'
+  | '捕鱼陷阱';
 
 export interface ItemDef {
   id: ItemId;
   name: string;
   icon: string;
-  category: '生存' | '建材' | '矿石' | '特殊';
+  category: '生存' | '建材' | '矿石' | '特殊' | '装备' | '药剂' | '工具' | '建筑';
   weight: number;       // per 物资图鉴 v0.9 (authoritative)
   stackLimit: number;
   description: string;
@@ -136,10 +148,8 @@ export interface WeatherDef {
 export type StatusEffectId =
   | '中毒'
   | '感染'
-  | '灼伤'
   | '迷路'
   | '疲惫'
-  | '沮丧'
   | '饱腹'
   | '精神饱满'
   | '专注'
