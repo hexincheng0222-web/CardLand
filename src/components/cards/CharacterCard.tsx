@@ -10,8 +10,10 @@ export interface CharacterCardProps {
   maxWeight: number;
   foodCount?: number;
   waterCount?: number;
+  herbCount?: number;
   onEat?: () => void;
   onDrink?: () => void;
+  onHeal?: () => void;
 }
 
 export function CharacterCard({
@@ -23,8 +25,10 @@ export function CharacterCard({
   maxWeight,
   foodCount = 0,
   waterCount = 0,
+  herbCount = 0,
   onEat,
   onDrink,
+  onHeal,
 }: CharacterCardProps) {
   const hpPercent = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const weightPercent = Math.max(0, Math.min(100, (weight / maxWeight) * 100));
@@ -69,6 +73,13 @@ export function CharacterCard({
               onClick={onDrink}
             >
               💧 饮水
+            </button>
+            <button
+              className={`${styles.actionBtn} ${herbCount === 0 ? styles.actionBtnDisabled : ''}`}
+              disabled={herbCount === 0}
+              onClick={onHeal}
+            >
+              🌿 治疗
             </button>
           </div>
         </div>

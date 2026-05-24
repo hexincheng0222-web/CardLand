@@ -24,6 +24,10 @@
   color: var(--text-secondary);
 }
 
+.tabWrapper {
+  margin-bottom: calc(-1 * var(--space-2));
+}
+
 /* ── Recipe grid ── */
 
 .recipes {

@@ -19,10 +19,11 @@
   letter-spacing: 0.02em;
 }
 
-/* ── Compact Attribute Row ── */
+/* ── Compact Attribute Grid ── */
 
-.attrRow {
+.attrGrid {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
@@ -110,6 +111,13 @@
 
 .btn:active {
   transform: translateY(0);
+}
+
+.statusLabel {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-green);
+  margin-left: var(--space-1);
 }
 
 /* ── Full-Screen Overlay ── */
@@ -200,14 +208,6 @@
   padding-bottom: var(--space-3);
   margin-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-/* ── Guide: Attribute Bars ── */
-
-.bars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }
 
 /* ── Crafting: Recipe List ── */

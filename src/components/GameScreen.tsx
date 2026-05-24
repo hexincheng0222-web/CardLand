@@ -15,7 +15,7 @@ import { GameTitleCard } from './cards/GameTitleCard';
 import { GuideCraftingCard } from './cards/GuideCraftingCard';
 import { CharacterCard } from './cards/CharacterCard';
 import { StatusIconPanel } from './cards/StatusIconPanel';
-import { SurvivalStatusCard } from './cards/SurvivalStatusCard';
+import { EquipmentCard, type Equipment } from './cards/EquipmentCard';
 
 // -- Card components (right main area) --
 import { LocationCard } from './cards/LocationCard';
@@ -72,6 +72,7 @@ export function GameScreen() {
   const inventory = usePlayerStore((s) => s.inventory);
   const statusEffects = usePlayerStore((s) => s.statusEffects);
   const useItem = usePlayerStore((s) => s.useItem);
+  const equipment = usePlayerStore((s) => s.equipment);
 
   const currentSubZone = useMapStore((s) => s.currentSubZone);
 
@@ -180,6 +181,26 @@ export function GameScreen() {
     return { overallStatus, statusDescription, activeEffects };
   }, [attributes, statusEffects]);
 
+  const EQUIPMENT_SLOTS = [
+    { slot: 'weapon', icon: '⚔️', name: '武器' },
+    { slot: 'armor', icon: '🛡️', name: '护甲' },
+    { slot: 'accessory', icon: '💍', name: '饰品' },
+    { slot: 'backpack', icon: '🎒', name: '背包' },
+  ] as const;
+
+  const equipmentData: Equipment[] = useMemo(() => {
+    return EQUIPMENT_SLOTS.map((def) => {
+      const equippedId = equipment[def.slot];
+      const itemDef = equippedId ? getItemDef(equippedId) : undefined;
+      return {
+        slot: def.slot,
+        icon: def.icon,
+        name: def.name,
+        item: itemDef ? { icon: itemDef.icon, name: itemDef.name } : undefined,
+      };
+    });
+  }, [equipment]);
+
   // ── Derived data: right main area ──
 
   const locationData = useMemo(() => {
@@ -277,6 +298,11 @@ export function GameScreen() {
     [inventory],
   );
 
+  const herbCount = useMemo(
+    () => inventory.find((s) => s.itemId === '草药')?.quantity ?? 0,
+    [inventory],
+  );
+
   const handleEat = useCallback(() => {
     if (foodCount > 0) useItem('食物');
   }, [foodCount, useItem]);
@@ -284,6 +310,10 @@ export function GameScreen() {
   const handleDrink = useCallback(() => {
     if (waterCount > 0) useItem('水');
   }, [waterCount, useItem]);
+
+  const handleHeal = useCallback(() => {
+    if (herbCount > 0) useItem('草药');
+  }, [herbCount, useItem]);
 
   const handleExplore = useCallback(() => {
     if (gamePhase !== 'exploration') return;
@@ -321,8 +351,9 @@ export function GameScreen() {
           weatherIcon={weatherInfo.icon}
           weatherName={weatherInfo.name}
           turn={gameState.turnNumber}
+          weatherTurnsRemaining={gameState.weather.turnsRemaining}
         />
-        <GuideCraftingCard attributes={attributePanelData} recipes={craftingPanelData} />
+        <GuideCraftingCard attributes={attributePanelData} recipes={craftingPanelData} survivalStatus={survivalStatusData.overallStatus} />
         <CharacterCard
           name="幸存者"
           avatarEmoji="🧑"
@@ -332,15 +363,13 @@ export function GameScreen() {
           maxWeight={maxWeight}
           foodCount={foodCount}
           waterCount={waterCount}
+          herbCount={herbCount}
           onEat={handleEat}
           onDrink={handleDrink}
+          onHeal={handleHeal}
         />
+        <EquipmentCard equipment={equipmentData} />
         <StatusIconPanel statuses={statusIconPanelData} />
-        <SurvivalStatusCard
-          overallStatus={survivalStatusData.overallStatus}
-          statusDescription={survivalStatusData.statusDescription}
-          activeEffects={survivalStatusData.activeEffects}
-        />
         <button className={styles.saveButton} onClick={handleSaveOpen}>
           💾 存档
         </button>

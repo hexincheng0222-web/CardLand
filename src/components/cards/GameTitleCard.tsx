@@ -5,11 +5,13 @@ interface GameTitleCardProps {
   weatherIcon?: string;
   weatherName?: string;
   turn?: number;
+  weatherTurnsRemaining?: number;
 }
 
-export function GameTitleCard({ weatherIcon, weatherName, turn }: GameTitleCardProps = {}) {
+export function GameTitleCard({ weatherIcon, weatherName, turn, weatherTurnsRemaining }: GameTitleCardProps = {}) {
   const hasWeather = !!weatherIcon || !!weatherName;
   const hasTurn = turn != null;
+  const hasWeatherCountdown = weatherTurnsRemaining != null;
 
   return (
     <Card variant="elevated" className={styles.titleCard}>
@@ -27,6 +29,11 @@ export function GameTitleCard({ weatherIcon, weatherName, turn }: GameTitleCardP
           {hasTurn && (
             <span className={styles.turnText}>回合 {turn}</span>
           )}
+        </div>
+      )}
+      {hasWeatherCountdown && (
+        <div className={`${styles.weatherCountdown} ${weatherTurnsRemaining <= 1 ? styles.urgent : ''}`}>
+          ({weatherTurnsRemaining}回合后切换)
         </div>
       )}
     </Card>
