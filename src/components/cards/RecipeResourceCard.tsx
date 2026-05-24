@@ -24,14 +24,12 @@ export function RecipeResourceCard({ recipes, resources }: RecipeResourceCardPro
         <div className={styles.recipes}>
           {recipes.map((recipe, index) => (
             <div key={index} className={styles.recipe}>
-              <div className={styles.recipeHeader}>
-                <span className={styles.recipeIcon}>{recipe.productIcon}</span>
-                <span className={styles.recipeName}>{recipe.productName}</span>
-              </div>
+              <span className={styles.recipeIcon}>{recipe.productIcon}</span>
+              <span className={styles.recipeName}>{recipe.productName}</span>
               <div className={styles.recipeIngredients}>
                 {recipe.ingredients.map((ing, i) => (
                   <span key={i} className={styles.ingTag}>
-                    {ing.icon} {ing.name} ×{ing.quantity}
+                    {ing.icon}×{ing.quantity}
                   </span>
                 ))}
               </div>

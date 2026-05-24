@@ -1,0 +1,240 @@
+/* ============================================================
+   GuideCraftingCard — twin sub-cards + popup overlay
+   ============================================================ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+/* ── Twin Sub-Cards Grid ── */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.subCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    transform var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background var(--transition-base);
+  font-family: inherit;
+  color: inherit;
+}
+
+.subCard:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 16px var(--accent-glow), 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: var(--bg-card-hover);
+}
+
+.subCard:active {
+  transform: translateY(0);
+}
+
+.subIcon {
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+
+.subLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color var(--transition-base);
+}
+
+.subCard:hover .subLabel {
+  color: var(--text-primary);
+}
+
+/* ── Full-Screen Overlay ── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  animation: overlayIn var(--transition-base) ease-out;
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Popup Content Card ── */
+
+.popup {
+  position: relative;
+  width: 70%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-glow);
+  animation: popupIn var(--transition-slow) ease-out;
+}
+
+@keyframes popupIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Close Button ── */
+
+.closeBtn {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.closeBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  background: var(--bg-card-hover);
+}
+
+/* ── Popup Heading ── */
+
+.popupHeading {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── Guide: Attribute Bars ── */
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ── Crafting: Recipe List ── */
+
+.recipes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.recipe {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color var(--transition-fast);
+}
+
+.recipe:hover {
+  border-color: var(--border-default);
+}
+
+.product {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.productIcon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.productName {
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.time {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.ingredients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ingredient {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg-card);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.ingIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.station {
+  font-size: var(--text-xs);
+  color: var(--color-yellow);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+}

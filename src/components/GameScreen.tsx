@@ -12,9 +12,7 @@ import { useWeightCalc } from '@stores/selectors';
 
 // -- Card components (left sidebar) --
 import { GameTitleCard } from './cards/GameTitleCard';
-import { WeatherTimeCard } from './cards/WeatherTimeCard';
-import { AttributePanel } from './cards/AttributePanel';
-import { CraftingPanel } from './cards/CraftingPanel';
+import { GuideCraftingCard } from './cards/GuideCraftingCard';
 import { CharacterCard } from './cards/CharacterCard';
 import { StatusIconPanel } from './cards/StatusIconPanel';
 import { SurvivalStatusCard } from './cards/SurvivalStatusCard';
@@ -125,12 +123,17 @@ export function GameScreen() {
 
   const statusIconPanelData = useMemo(
     () =>
-      STATUS_EFFECTS.map((def) => ({
-        icon: def.icon,
-        name: def.name,
-        isActive: statusEffects.some((se) => se.id === def.id),
-        isNegative: def.isNegative,
-      })),
+      STATUS_EFFECTS.map((def) => {
+        const activeEffect = statusEffects.find((se) => se.id === def.id);
+        return {
+          icon: def.icon,
+          name: def.name,
+          isActive: !!activeEffect,
+          isNegative: def.isNegative,
+          details: def.effectDescription,
+          remainingTurns: activeEffect?.remainingDuration ?? 0,
+        };
+      }),
     [statusEffects],
   );
 
@@ -277,14 +280,12 @@ export function GameScreen() {
     <div className={styles.screen}>
       {/* ─── Left Sidebar ─── */}
       <aside className={styles.sidebar}>
-        <GameTitleCard />
-        <WeatherTimeCard
+        <GameTitleCard
           weatherIcon={weatherInfo.icon}
           weatherName={weatherInfo.name}
           turn={gameState.turnNumber}
         />
-        <AttributePanel attributes={attributePanelData} />
-        <CraftingPanel recipes={craftingPanelData} />
+        <GuideCraftingCard attributes={attributePanelData} recipes={craftingPanelData} />
         <CharacterCard
           name="幸存者"
           avatarEmoji="🧑"

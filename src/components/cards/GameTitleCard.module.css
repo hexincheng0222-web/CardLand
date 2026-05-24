@@ -29,3 +29,25 @@
   letter-spacing: 2px;
   text-transform: uppercase;
 }
+
+.weatherRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.weatherText {
+  color: var(--text-secondary);
+}
+
+.separator {
+  color: var(--text-muted);
+}
+
+.turnText {
+  color: var(--text-muted);
+}

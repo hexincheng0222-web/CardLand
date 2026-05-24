@@ -15,40 +15,74 @@ export interface LocationCardProps {
 }
 
 export function LocationCard({ currentLocation, locationIcon, directions, onDirectionClick, onMapClick }: LocationCardProps) {
-  const dirConfig = [
-    { key: 'north', label: '北', arrow: '↑' },
-    { key: 'south', label: '南', arrow: '↓' },
-    { key: 'east', label: '东', arrow: '→' },
-    { key: 'west', label: '西', arrow: '←' },
-  ] as const;
+  const cards = [
+    {
+      key: 'current',
+      icon: locationIcon,
+      label: currentLocation,
+      subLabel: '当前位置',
+      available: true,
+      onClick: undefined,
+    },
+    {
+      key: 'north',
+      icon: '↑',
+      label: directions.north || '—',
+      subLabel: '北',
+      available: !!directions.north,
+      onClick: () => onDirectionClick?.('north'),
+    },
+    {
+      key: 'south',
+      icon: '↓',
+      label: directions.south || '—',
+      subLabel: '南',
+      available: !!directions.south,
+      onClick: () => onDirectionClick?.('south'),
+    },
+    {
+      key: 'east',
+      icon: '→',
+      label: directions.east || '—',
+      subLabel: '东',
+      available: !!directions.east,
+      onClick: () => onDirectionClick?.('east'),
+    },
+    {
+      key: 'west',
+      icon: '←',
+      label: directions.west || '—',
+      subLabel: '西',
+      available: !!directions.west,
+      onClick: () => onDirectionClick?.('west'),
+    },
+    {
+      key: 'map',
+      icon: '🗺️',
+      label: '地图概览',
+      subLabel: '查看全貌',
+      available: true,
+      onClick: onMapClick,
+    },
+  ];
 
   return (
     <Card className={styles.card}>
       <h2 className={styles.heading}>📍 地点</h2>
-      <div className={styles.center}>
-        <span className={styles.locationIcon}>{locationIcon}</span>
-        <span className={styles.locationName}>{currentLocation}</span>
+      <div className={styles.grid}>
+        {cards.map((card) => (
+          <button
+            key={card.key}
+            className={`${styles.locationCard} ${card.available ? styles.available : styles.unavailable} ${card.key === 'current' ? styles.current : ''}`}
+            onClick={card.onClick}
+            disabled={!card.available || !card.onClick}
+          >
+            <span className={styles.cardIcon}>{card.icon}</span>
+            <span className={styles.cardLabel}>{card.label}</span>
+            <span className={styles.cardSubLabel}>{card.subLabel}</span>
+          </button>
+        ))}
       </div>
-      <div className={styles.directions}>
-        {dirConfig.map((dir) => {
-          const dest = directions[dir.key as keyof typeof directions];
-          return (
-            <button
-              key={dir.key}
-              className={`${styles.dirCard} ${dest ? styles.available : styles.unavailable}`}
-              onClick={() => dest && onDirectionClick?.(dir.key)}
-              disabled={!dest}
-            >
-              <span className={styles.dirArrow}>{dir.arrow}</span>
-              <span className={styles.dirLabel}>{dir.label}</span>
-              <span className={styles.dirDest}>{dest || '—'}</span>
-            </button>
-          );
-        })}
-      </div>
-      <button className={styles.mapBtn} onClick={onMapClick}>
-        🗺️ 地图概览
-      </button>
     </Card>
   );
 }

@@ -12,57 +12,44 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-5);
-  background: var(--bg-input);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-}
-
-.locationIcon {
-  font-size: 48px;
-  line-height: 1;
-}
-
-.locationName {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.directions {
+.grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-2);
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-3);
 }
 
-.dirCard {
+.locationCard {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-2);
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-2);
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-family: inherit;
   cursor: pointer;
   transition: all var(--transition-base);
+  min-height: 100px;
+  aspect-ratio: 1;
 }
 
-.dirCard:hover:not(:disabled) {
+.locationCard:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: var(--border-glow);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.dirCard:active:not(:disabled) {
+.locationCard:active:not(:disabled) {
   transform: translateY(0);
+}
+
+.current {
+  background: var(--bg-elevated);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .available {
@@ -74,41 +61,23 @@
   cursor: not-allowed;
 }
 
-.dirArrow {
-  font-size: var(--text-lg);
-  font-weight: 700;
+.cardIcon {
+  font-size: 32px;
   line-height: 1;
 }
 
-.dirLabel {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.dirDest {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
+.cardLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
 
-.mapBtn {
-  width: 100%;
-  padding: var(--space-3);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.mapBtn:hover {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 12px var(--accent-glow);
+.cardSubLabel {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }

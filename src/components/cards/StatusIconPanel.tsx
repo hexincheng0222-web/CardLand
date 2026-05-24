@@ -8,13 +8,15 @@ export interface StatusIconPanelProps {
     name: string;
     isActive: boolean;
     isNegative: boolean;
+    details: string;
+    remainingTurns: number;
   }[];
 }
 
 export function StatusIconPanel({ statuses }: StatusIconPanelProps) {
   return (
     <Card className={styles.panel}>
-      <h2 className={styles.heading}>⚡ 状态图标</h2>
+      <h2 className={styles.heading}>⚡ 状态</h2>
       <div className={styles.grid}>
         {statuses.map((status) => (
           <StatusBadge
@@ -23,6 +25,8 @@ export function StatusIconPanel({ statuses }: StatusIconPanelProps) {
             name={status.name}
             isActive={status.isActive}
             isNegative={status.isNegative}
+            details={status.details}
+            remainingTurns={status.remainingTurns}
           />
         ))}
       </div>

@@ -49,6 +49,8 @@ const SAMPLE_STATUSES = STATUS_EFFECTS.map((status) => ({
   name: status.name,
   isActive: status.id === '中毒' || status.id === '饱腹' || status.id === '专注',
   isNegative: status.isNegative,
+  details: status.effectDescription,
+  remainingTurns: status.duration ?? 0,
 }));
 
 const SAMPLE_INVENTORY = [
