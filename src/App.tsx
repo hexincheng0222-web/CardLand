@@ -25,7 +25,6 @@ function App() {
     case 'exploration':
     case 'combat':
     case 'event':
-    case 'crafting':
     default:
       return <GameScreen />;
   }

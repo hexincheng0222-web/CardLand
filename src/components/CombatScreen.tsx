@@ -39,7 +39,7 @@ export function CombatScreen() {
   const inventory = usePlayerStore((s) => s.inventory);
 
   const weightRatio = useMemo(() => {
-    const totalWeight = inventory.reduce((sum, slot) => {
+    const totalWeight = inventory.slots.reduce((sum: number, slot: { itemId: string; quantity: number }) => {
       const itemDef = ITEMS.find((i) => i.id === slot.itemId);
       return sum + (itemDef?.weight ?? 0) * slot.quantity;
     }, 0);

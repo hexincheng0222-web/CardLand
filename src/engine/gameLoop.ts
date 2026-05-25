@@ -5,8 +5,8 @@
 
 import type { HandType } from '@data/types';
 import { WEATHER_TYPES, INITIAL_HANDS, ATTRIBUTES } from '@data/v1-spec';
-import type { InventorySlot } from './inventory';
-import { addItem } from './inventory';
+import type { Inventory } from './inventory';
+import { addItem, getItemDef, createInventory } from './inventory';
 import type { Attributes } from './attributes';
 import {
   createSeededRNG,
@@ -30,9 +30,11 @@ export function startNewGame(handType: HandType, seed: number): GameState {
 
   const rng = createSeededRNG(seed);
 
-  let inventory: InventorySlot[] = [];
+  let inventory: Inventory = createInventory();
   for (const item of hand.items) {
-    inventory = addItem(inventory, item.itemId, item.quantity);
+    const def = getItemDef(item.itemId)!;
+    const result = addItem(inventory, item.itemId, item.quantity, def.weight, def.stackLimit);
+    inventory = result.inventory;
   }
 
   const currentWeather = generateWeather(rng);

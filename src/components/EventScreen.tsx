@@ -40,7 +40,7 @@ export function EventScreen({ event, onComplete }: EventScreenProps) {
   const [result, setResult] = useState<EventResult | null>(null);
 
   const playerState = useMemo(
-    () => buildPlayerStateForEvent(attributes, inventory),
+    () => buildPlayerStateForEvent(attributes, inventory.slots as { itemId: ItemId; quantity: number }[]),
     [attributes, inventory]
   );
 

@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react';
 import {
   saveToSlot,
-  loadFromSlot,
+  loadAndRestore,
   deleteSlot,
   getAllSlotMetadata,
   getAutoSaveTurn,
@@ -34,7 +34,7 @@ export function SavePanel({ onClose }: SavePanelProps) {
   }, [showFeedback]);
 
   const handleLoad = useCallback((slot: 0 | 1 | 2) => {
-    const ok = loadFromSlot(slot);
+    const ok = loadAndRestore(slot);
     if (ok) {
       showFeedback(`已从槽位 ${slot + 1} 读取`);
       setShowSlots(false);
@@ -68,7 +68,7 @@ export function SavePanel({ onClose }: SavePanelProps) {
         {autoSaveTurn > 0 && (
           <div className={styles.autoSave}>
             <span className={styles.autoSaveDot} />
-            自动存档：第 {autoSaveTurn} 回合
+            自动存档：第 {autoSaveTurn} 天
           </div>
         )}
 
@@ -105,7 +105,7 @@ export function SavePanel({ onClose }: SavePanelProps) {
                   {m.hasData ? (
                     <>
                       <span className={styles.slotMeta}>
-                        第 {m.turn} 回合 · {formatTimestamp(m.timestamp)}
+                        第 {m.turnNumber} 天 · {formatTimestamp(m.timestamp)}
                       </span>
                     </>
                   ) : (

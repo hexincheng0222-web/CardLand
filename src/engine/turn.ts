@@ -12,9 +12,9 @@ import {
   clampAttributes,
   checkDeathConditions,
 } from './attributes';
-import type { InventorySlot } from './inventory';
-import { addItem } from './inventory';
-import { canCraft, executeCraft } from './crafting';
+import type { Inventory } from './inventory';
+import { addItem, getItemDef, createInventory } from './inventory';
+import { canCraft, executeCraft, createRecipeBook } from './crafting';
 import type { CombatState } from './combat';
 import { initiateCombat, checkCombatEnd, generateLoot, resolvePlayerAction, resolveEnemyAction } from './combat';
 import type { PlayerState } from './events';
@@ -30,7 +30,6 @@ import type {
 } from '@data/types';
 import {
   WEATHER_TYPES,
-  CRAFTING_RECIPES,
   ENEMIES,
   INITIAL_HANDS,
   ATTRIBUTES,
@@ -57,7 +56,7 @@ export interface WeatherState {
 /** Overall game state — all pure, all immutable */
 export interface GameState {
   attributes: Attributes;
-  inventory: InventorySlot[];
+  inventory: Inventory;
   currentPosition: PointId;
   weather: WeatherState;
   turnNumber: number;
@@ -84,7 +83,7 @@ export interface GatherAction {
 
 export interface CraftAction {
   type: 'craft';
-  recipeIndex: number;
+  recipeId: string;
 }
 
 export interface RestAction {
@@ -245,10 +244,10 @@ function resolveMoveAction(
   }
 
   const stamina = state.attributes['体力值'] ?? 0;
-  if (stamina < cost) {
+  if (stamina < cost.staminaCost) {
     return {
       state,
-      actionLogs: [`体力不足 (${stamina} < ${cost})，无法移动`],
+      actionLogs: [`体力不足 (${stamina} < ${cost.staminaCost})，无法移动`],
     };
   }
 
@@ -260,7 +259,7 @@ function resolveMoveAction(
 
   const newAttributes = {
     ...state.attributes,
-    '体力值': stamina - cost,
+    '体力值': stamina - cost.staminaCost,
   };
 
   return {
@@ -290,14 +289,16 @@ function resolveGatherAction(
   }
 
   const logs: string[] = [];
-  let newInventory = [...state.inventory];
+  let newInventory: Inventory = { ...state.inventory, slots: state.inventory.slots.map(s => ({ ...s })) };
   let newAttributes = { ...state.attributes };
 
   // Gather resources from outputs
   for (const output of point.outputs) {
     const quantity = output.min + Math.floor(rng() * (output.max - output.min + 1));
     if (quantity > 0) {
-      newInventory = addItem(newInventory, output.itemId, quantity);
+      const def = getItemDef(output.itemId)!;
+      const result = addItem(newInventory, output.itemId, quantity, def.weight, def.stackLimit);
+      newInventory = result.inventory;
       logs.push(`采集到 ${output.itemId}×${quantity}`);
     }
   }
@@ -327,7 +328,9 @@ function resolveGatherAction(
           // Apply item changes
           for (const change of outcome.itemChanges) {
             if (change.quantity > 0) {
-              newInventory = addItem(newInventory, change.itemId, change.quantity);
+              const def = getItemDef(change.itemId)!;
+              const result = addItem(newInventory, change.itemId, change.quantity, def.weight, def.stackLimit);
+              newInventory = result.inventory;
             } else {
               // Negative quantity — consume items (simplified)
               // This is a simplification; full removal would need removeItem
@@ -366,26 +369,29 @@ function resolveCraftAction(
   state: GameState,
   action: CraftAction,
 ): ActionPhaseResult {
-  const recipe = CRAFTING_RECIPES[action.recipeIndex];
-  if (!recipe) {
-    return {
-      state,
-      actionLogs: [`配方索引 ${action.recipeIndex} 无效`],
-    };
-  }
+  const recipeBook = createRecipeBook();
+  const hasWorkstation = state.inventory.slots.some(
+    (s) => s.itemId === '工作台',
+  );
+  const playerEnergy = state.attributes['精力值'] ?? 80;
 
-  const station = recipe.station;
-  const check = canCraft(state.inventory, recipe, station);
+  const check = canCraft(recipeBook, state.inventory, action.recipeId, hasWorkstation);
 
   if (!check.canCraft) {
     return {
       state,
-      actionLogs: [`无法制作 ${recipe.productId}：${check.detail ?? check.reason}`],
+      actionLogs: [`无法制作 ${action.recipeId}：${check.detail ?? check.reason}`],
     };
   }
 
   try {
-    const result = executeCraft(state.inventory, recipe);
+    const result = executeCraft(
+      recipeBook,
+      state.inventory,
+      action.recipeId,
+      hasWorkstation,
+      playerEnergy,
+    );
     return {
       state: {
         ...state,
@@ -524,9 +530,11 @@ function resolveCombatAction(
   if (afterCheck.status === 'victory') {
     logs.push(`击败 ${enemy.name}！`);
     const loot = generateLoot(enemy, rng);
-    let newInventory = [...finalState.inventory];
+    let newInventory: Inventory = { ...finalState.inventory, slots: finalState.inventory.slots.map(s => ({ ...s })) };
     for (const item of loot.items) {
-      newInventory = addItem(newInventory, item.itemId, item.quantity);
+      const def = getItemDef(item.itemId)!;
+      const result = addItem(newInventory, item.itemId, item.quantity, def.weight, def.stackLimit);
+      newInventory = result.inventory;
       logs.push(`获得 ${item.itemId}×${item.quantity}`);
     }
     if (loot.moodBonus > 0) {
@@ -638,13 +646,13 @@ export function startNewGame(handType: HandType, seed: number): GameState {
 
   const rng = createSeededRNG(seed);
 
-  // Initialize inventory from hand
-  let inventory: InventorySlot[] = [];
+  let inventory: Inventory = createInventory();
   for (const item of hand.items) {
-    inventory = addItem(inventory, item.itemId, item.quantity);
+    const def = getItemDef(item.itemId)!;
+    const result = addItem(inventory, item.itemId, item.quantity, def.weight, def.stackLimit);
+    inventory = result.inventory;
   }
 
-  // Initialize weather
   const currentWeather = generateWeather(rng);
   const weatherDef = WEATHER_TYPES.find((w) => w.id === currentWeather);
 
@@ -668,7 +676,7 @@ export function startNewGame(handType: HandType, seed: number): GameState {
 
 /** Extract subzone ID from a point ID like "A1-North" → "A1" */
 function pointIdToSubZone(pointId: PointId): SubZoneId {
-  const match = pointId.match(/^([AB]\d)-/);
+  const match = pointId.match(/^([A-F]\d)-/);
   return (match?.[1] ?? 'A1') as SubZoneId;
 }
 
@@ -683,15 +691,19 @@ function findEnemyAtLocation(subZone: SubZoneId): EnemyDef | null {
 function terrainFromPoint(point: { subZone: SubZoneId; type: string }): '海滩' | '丛林' | '山地' | '沼泽' | '浅海' | '遗迹' {
   const zone = point.subZone.charAt(0) as ZoneId;
   if (zone === 'A') return '海滩';
+  if (zone === 'C') return '山地';
+  if (zone === 'D') return '沼泽';
+  if (zone === 'E') return '浅海';
+  if (zone === 'F') return '遗迹';
   if (point.subZone === 'B1') return '沼泽';
   if (point.subZone === 'B3') return '沼泽';
   return '丛林';
 }
 
-/** Convert InventorySlot[] to Record<string, number> for event system */
-function inventoryToRecord(inventory: InventorySlot[]): Record<ItemId, number> {
+/** Convert Inventory to Record<string, number> for event system */
+function inventoryToRecord(inventory: Inventory): Record<ItemId, number> {
   const record: Record<string, number> = {};
-  for (const slot of inventory) {
+  for (const slot of inventory.slots) {
     record[slot.itemId] = (record[slot.itemId] ?? 0) + slot.quantity;
   }
   return record;

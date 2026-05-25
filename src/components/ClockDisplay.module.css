@@ -1,0 +1,26 @@
+/* ============================================================
+   ClockDisplay — "第 X 天 HH:MM"
+   ============================================================ */
+
+.clock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.todIcon {
+  font-size: var(--text-md);
+  line-height: 1;
+}
+
+.text {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}

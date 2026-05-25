@@ -1,497 +1,429 @@
 import { describe, it, expect } from 'vitest';
-import type { CraftingRecipe, CraftingStation, ItemId } from '@data/types';
-import { CRAFTING_RECIPES } from '@data/v1-spec';
-import type { InventorySlot } from '../inventory';
-import { addItem, calculateWeight } from '../inventory';
-import { canCraft, executeCraft } from '../crafting';
+import type { Inventory } from '../inventory';
+import { createInventory, addItem, getItemDef, getItemQuantity } from '../inventory';
+import {
+  createRecipeBook,
+  unlockBlueprint,
+  getAvailableRecipes,
+  canCraft,
+  executeCraft,
+  calculateCraftTime,
+  calculateEnergyCost,
+  calculateSuccessRate,
+  calculateCraftTimeById,
+  calculateCraftEnergyCostById,
+  calculateCraftSuccessRateById,
+  executeCraftAction,
+} from '../crafting';
 
-const slot = (itemId: ItemId, quantity: number): InventorySlot => ({
-  itemId,
-  quantity,
-});
-
-// ---- Helper: find a recipe by matching ingredients ----
-function findRecipe(productId: ItemId, station: CraftingStation, ingredientMatcher: (ingredients: { itemId: ItemId; quantity: number }[]) => boolean): CraftingRecipe | undefined {
-  return CRAFTING_RECIPES.find(
-    (r) => r.productId === productId && r.station === station && ingredientMatcher(r.ingredients),
-  );
-}
-
-// ---- Helper: build inventory from ingredients ----
-function buildInventory(ingredients: { itemId: ItemId; quantity: number }[]): InventorySlot[] {
-  let inv: InventorySlot[] = [];
-  for (const ing of ingredients) {
-    inv = addItem(inv, ing.itemId, ing.quantity);
+function buildInventory(items: { itemId: string; quantity: number }[]): Inventory {
+  let inv = createInventory();
+  for (const { itemId, quantity } of items) {
+    const def = getItemDef(itemId as any)!;
+    const result = addItem(inv, itemId, quantity, def.weight, def.stackLimit);
+    inv = result.inventory;
   }
   return inv;
 }
 
-// ============================================================
-// canCraft
-// ============================================================
+describe('createRecipeBook', () => {
+  it('initializes with all recipes from data', () => {
+    const book = createRecipeBook();
+    expect(book.recipes.length).toBeGreaterThan(0);
+    expect(book.unlockedBlueprints.size).toBe(0);
+  });
+
+  it('contains both default and blueprint-gated recipes', () => {
+    const book = createRecipeBook();
+    const defaultRecipes = book.recipes.filter((r) => r.blueprintRequired === null);
+    const blueprintRecipes = book.recipes.filter((r) => r.blueprintRequired !== null);
+    expect(defaultRecipes.length).toBeGreaterThan(0);
+    expect(blueprintRecipes.length).toBeGreaterThan(0);
+  });
+});
+
+describe('unlockBlueprint', () => {
+  it('adds blueprint to unlocked set', () => {
+    const book = createRecipeBook();
+    const updated = unlockBlueprint(book, '皮甲蓝图');
+    expect(updated.unlockedBlueprints.has('皮甲蓝图')).toBe(true);
+  });
+
+  it('does not mutate original book', () => {
+    const book = createRecipeBook();
+    unlockBlueprint(book, '皮甲蓝图');
+    expect(book.unlockedBlueprints.has('皮甲蓝图')).toBe(false);
+  });
+
+  it('supports multiple blueprints', () => {
+    const book = createRecipeBook();
+    let updated = unlockBlueprint(book, '皮甲蓝图');
+    updated = unlockBlueprint(updated, '木筏蓝图');
+    expect(updated.unlockedBlueprints.has('皮甲蓝图')).toBe(true);
+    expect(updated.unlockedBlueprints.has('木筏蓝图')).toBe(true);
+  });
+});
+
+describe('getAvailableRecipes', () => {
+  it('returns only default recipes when no blueprints unlocked', () => {
+    const book = createRecipeBook();
+    const available = getAvailableRecipes(book, new Set());
+    for (const r of available) {
+      expect(r.blueprintRequired).toBeNull();
+    }
+  });
+
+  it('includes blueprint recipes after unlock', () => {
+    const book = createRecipeBook();
+    const blueprints = new Set(['皮甲蓝图']);
+    const available = getAvailableRecipes(book, blueprints);
+    const leatherArmor = available.find((r) => r.id === '皮甲');
+    expect(leatherArmor).toBeDefined();
+  });
+
+  it('filters by category', () => {
+    const book = createRecipeBook();
+    const tools = getAvailableRecipes(book, new Set(), '工具');
+    for (const r of tools) {
+      expect(r.category).toBe('工具');
+    }
+    expect(tools.length).toBeGreaterThan(0);
+  });
+
+  it('returns empty for non-existent category with no matches', () => {
+    const book = createRecipeBook();
+    const filtered = getAvailableRecipes(book, new Set(), '材料');
+    const nonMaterial = filtered.find((r) => r.category !== '材料');
+    expect(nonMaterial).toBeUndefined();
+  });
+});
 
 describe('canCraft', () => {
-  // --- Tier 0: 绳索 (纤维×3 → 绳索, station=none) ---
-  it('allows crafting 绳索 with enough 纤维 at correct station', () => {
-    const recipe: CraftingRecipe = {
-      productId: '绳索',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 3 }],
-      station: 'none',
-      craftingTime: 1,
-    };
+  it('returns true when materials and station available', () => {
+    const book = createRecipeBook();
     const inv = buildInventory([{ itemId: '纤维', quantity: 3 }]);
-    const result = canCraft(inv, recipe, 'none');
+    const result = canCraft(book, inv, '绳索', false);
     expect(result.canCraft).toBe(true);
   });
 
-  it('rejects 绳索 when missing 纤维', () => {
-    const recipe: CraftingRecipe = {
-      productId: '绳索',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 3 }],
-      station: 'none',
-      craftingTime: 1,
-    };
-    const inv = buildInventory([{ itemId: '纤维', quantity: 2 }]);
-    const result = canCraft(inv, recipe, 'none');
-    expect(result.canCraft).toBe(false);
-    expect(result.reason).toBe('missing_materials');
-  });
-
-  it('rejects when wrong station', () => {
-    // 皮甲 requires workbench
-    const recipe: CraftingRecipe = {
-      productId: '布料',
-      productQuantity: 1,
-      ingredients: [
-        { itemId: '布料', quantity: 2 },
-        { itemId: '纤维', quantity: 2 },
-      ],
-      station: 'workbench',
-      craftingTime: 2,
-    };
+  it('returns false when missing blueprint', () => {
+    const book = createRecipeBook();
     const inv = buildInventory([
       { itemId: '布料', quantity: 2 },
       { itemId: '纤维', quantity: 2 },
     ]);
-    const result = canCraft(inv, recipe, 'none');
+    const result = canCraft(book, inv, '皮甲', true);
+    expect(result.canCraft).toBe(false);
+    expect(result.reason).toBe('missing_blueprint');
+  });
+
+  it('returns false when missing materials', () => {
+    const book = createRecipeBook();
+    const inv = buildInventory([{ itemId: '纤维', quantity: 2 }]);
+    const result = canCraft(book, inv, '绳索', false);
+    expect(result.canCraft).toBe(false);
+    expect(result.reason).toBe('missing_materials');
+  });
+
+  it('returns false when wrong station', () => {
+    const book = createRecipeBook();
+    const inv = buildInventory([
+      { itemId: '铁矿', quantity: 2 },
+      { itemId: '纤维', quantity: 1 },
+    ]);
+    const result = canCraft(book, inv, '修理工具', false);
     expect(result.canCraft).toBe(false);
     expect(result.reason).toBe('wrong_station');
   });
 
-  it('rejects when crafting would have net positive weight exceeding capacity', () => {
-    // Use a recipe where output is heavier than inputs.
-    // e.g. consume 草药×1 (weight 1) → produce 石材×1 (weight 8): net +7
-    const recipe: CraftingRecipe = {
-      productId: '石材',
-      productQuantity: 1,
-      ingredients: [{ itemId: '草药', quantity: 1 }],
-      station: 'none',
-      craftingTime: 1,
-    };
-    // Inventory: 食物×48 (96 weight) + 草药×1 (1 weight) = 97 total.
-    // After craft: 97 - 1 + 8 = 104 > 100.
-    const inv = [slot('食物', 48), slot('草药', 1)];
-    const result = canCraft(inv, recipe, 'none');
+  it('returns false for non-existent recipe', () => {
+    const book = createRecipeBook();
+    const inv = createInventory();
+    const result = canCraft(book, inv, '不存在的配方', false);
     expect(result.canCraft).toBe(false);
-    expect(result.reason).toBe('weight_limit_exceeded');
+    expect(result.reason).toBe('recipe_not_found');
   });
 
-  it('allows crafting even at heavy weight when recipe decreases net weight', () => {
-    // 石斧 consumes 木材×2 (10) + 石材×1 (8) = 18 weight, produces 工具 (5 weight): net -13
-    const recipe: CraftingRecipe = {
-      productId: '工具',
-      productQuantity: 1,
-      ingredients: [
-        { itemId: '木材', quantity: 2 },
-        { itemId: '石材', quantity: 1 },
-      ],
-      station: 'none',
-      craftingTime: 2,
-    };
-    // Inventory at 95 weight + materials. After crafting: 95 - 18 + 5 = 82 (still ≤ 100)
-    const inv = [
-      ...buildInventory([
-        { itemId: '木材', quantity: 2 },
-        { itemId: '石材', quantity: 1 },
-      ]),
-      ...buildInventory([{ itemId: '食物', quantity: 39 }]), // 39*2=78, +18 from materials = 96 total
-    ];
-    const result = canCraft(inv, recipe, 'none');
+  it('allows crafting blueprint recipe after unlock', () => {
+    const book = createRecipeBook();
+    const updated = unlockBlueprint(book, '皮甲蓝图');
+    const inv = buildInventory([
+      { itemId: '布料', quantity: 2 },
+      { itemId: '纤维', quantity: 2 },
+    ]);
+    const result = canCraft(updated, inv, '皮甲', true);
     expect(result.canCraft).toBe(true);
-  });
-
-  // --- Tier 0 recipe tests with actual spec data ---
-  describe('Tier 0 recipes (no station)', () => {
-    // 石斧: 木材×2 + 石材×1 → 工具
-    it('allows 石斧', () => {
-      const recipe = findRecipe('石刀', 'none', (ings) =>
-        ings.some((i) => i.itemId === '石材'),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '木材', quantity: 2 },
-        { itemId: '石材', quantity: 1 },
-      ]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 木矛: 木材×2 + 绳索×1 → 工具
-    it('allows 木矛', () => {
-      const recipe = findRecipe('木矛', 'none', (ings) =>
-        ings.some((i) => i.itemId === '绳索') && !ings.some((i) => i.itemId === '石材'),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '木材', quantity: 2 },
-        { itemId: '绳索', quantity: 1 },
-      ]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-
-    it('rejects 木矛 when missing 绳索', () => {
-      const recipe = findRecipe('木矛', 'none', (ings) =>
-        ings.some((i) => i.itemId === '绳索') && !ings.some((i) => i.itemId === '石材'),
-      );
-      const inv = buildInventory([{ itemId: '木材', quantity: 2 }]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(false);
-    });
-
-    // 布甲: 纤维×2 + 绳索×1 → 布料 (v1-spec recipe for "防具类")
-    it('allows 布甲', () => {
-      const recipe = findRecipe('布甲', 'none', (ings) =>
-        ings.some((i) => i.itemId === '绳索'),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '纤维', quantity: 2 },
-        { itemId: '绳索', quantity: 1 },
-      ]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 绷带: 布料×1 → (v1-spec has a recipe for it - actually looking at the recipes,
-    //        the 消耗品类 entry for 草药×2 is for 药膏, 解毒草×1 is for 解毒剂)
-    //        Actually in the v1-spec, 绷带 is not explicitly a crafting recipe - it's 布料×1
-    //        But in 物资图鉴, 绷带: 🧶×1 (布料×1). Let me just define it inline.
-
-    // 药膏: 草药×2 → 草药 (v1-spec)
-    it('allows 药膏', () => {
-      const recipe = findRecipe('药膏', 'none', (ings) =>
-        ings.length === 1 && ings[0].itemId === '草药' && ings[0].quantity === 2,
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([{ itemId: '草药', quantity: 2 }]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 解毒剂: 解毒草×1 → 解毒草 (v1-spec)
-    it('allows 解毒剂', () => {
-      const recipe = findRecipe('解毒剂', 'none', (ings) =>
-        ings.length === 1 && ings[0].itemId === '解毒草',
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([{ itemId: '解毒草', quantity: 1 }]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 火把: 木材×1 + 纤维×2 → 工具 (v1-spec)
-    it('allows 火把', () => {
-      const recipe = findRecipe('火把', 'none', (ings) =>
-        ings.some((i) => i.itemId === '木材' && i.quantity === 1) &&
-        ings.some((i) => i.itemId === '纤维' && i.quantity === 2),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '木材', quantity: 1 },
-        { itemId: '纤维', quantity: 2 },
-      ]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 简易营地: 木材×4 + 纤维×2 → 工具 (v1-spec)
-    it('allows 简易营地', () => {
-      const recipe = findRecipe('简易营地', 'none', (ings) =>
-        ings.some((i) => i.itemId === '木材' && i.quantity === 4),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '木材', quantity: 4 },
-        { itemId: '纤维', quantity: 2 },
-      ]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(true);
-    });
-  });
-
-  // --- Tier 1 recipes (workbench) ---
-  describe('Tier 1 recipes (workbench)', () => {
-    // 皮甲: 布料×2 + 纤维×2 → 布料 (v1-spec)
-    it('allows 皮甲 at workbench', () => {
-      const recipe = findRecipe('皮甲', 'workbench', (ings) =>
-        ings.some((i) => i.itemId === '布料' && i.quantity === 2),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '布料', quantity: 2 },
-        { itemId: '纤维', quantity: 2 },
-      ]);
-      const result = canCraft(inv, recipe!, 'workbench');
-      expect(result.canCraft).toBe(true);
-    });
-
-    it('rejects 皮甲 without workbench', () => {
-      const recipe = findRecipe('皮甲', 'workbench', (ings) =>
-        ings.some((i) => i.itemId === '布料' && i.quantity === 2),
-      );
-      const inv = buildInventory([
-        { itemId: '布料', quantity: 2 },
-        { itemId: '纤维', quantity: 2 },
-      ]);
-      const result = canCraft(inv, recipe!, 'none');
-      expect(result.canCraft).toBe(false);
-      expect(result.reason).toBe('wrong_station');
-    });
-
-    // 修理工具: 铁矿×2 + 纤维×1 → 工具 (v1-spec workbench)
-    it('allows 修理工具 at workbench', () => {
-      const recipe = findRecipe('修理工具', 'workbench', (ings) =>
-        ings.some((i) => i.itemId === '铁矿'),
-      );
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '铁矿', quantity: 2 },
-        { itemId: '纤维', quantity: 1 },
-      ]);
-      const result = canCraft(inv, recipe!, 'workbench');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 加固营地: 木材×3 + 金属件×1 → 工具 (v1-spec workbench)
-    it('allows 加固营地 at workbench', () => {
-      const recipe = findRecipe('木筏', 'workbench', () => true);
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '木材', quantity: 3 },
-        { itemId: '绳索', quantity: 2 },
-      ]);
-      const result = canCraft(inv, recipe!, 'workbench');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 木筏: 木材×3 + 绳索×2 → 绳索 (v1-spec workbench)
-    it('allows 木筏 at workbench', () => {
-      const recipe = findRecipe('木筏', 'workbench', () => true);
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '木材', quantity: 3 },
-        { itemId: '绳索', quantity: 2 },
-      ]);
-      const result = canCraft(inv, recipe!, 'workbench');
-      expect(result.canCraft).toBe(true);
-    });
-
-    // 捕鱼陷阱: 渔网×1 + 木材×1 → 渔网 (v1-spec workbench)
-    it('allows 捕鱼陷阱 at workbench', () => {
-      const recipe = findRecipe('捕鱼陷阱', 'workbench', () => true);
-      expect(recipe).toBeDefined();
-      const inv = buildInventory([
-        { itemId: '渔网', quantity: 1 },
-        { itemId: '木材', quantity: 1 },
-      ]);
-      const result = canCraft(inv, recipe!, 'workbench');
-      expect(result.canCraft).toBe(true);
-    });
   });
 });
 
-// ============================================================
-// executeCraft
-// ============================================================
+describe('calculateCraftTime', () => {
+  it('returns 20 minutes at normal energy with no station penalty', () => {
+    const book = createRecipeBook();
+    const recipe = book.recipes.find((r) => r.id === '绳索')!;
+    expect(calculateCraftTime(recipe, false, 80)).toBe(20);
+  });
+
+  it('returns 30 minutes when energy <= 50', () => {
+    const book = createRecipeBook();
+    const recipe = book.recipes.find((r) => r.id === '绳索')!;
+    expect(calculateCraftTime(recipe, false, 50)).toBe(30);
+    expect(calculateCraftTime(recipe, false, 30)).toBe(30);
+  });
+
+  it('returns 40 minutes for advanced recipe without workstation', () => {
+    const book = createRecipeBook();
+    const recipe = book.recipes.find((r) => r.id === '修理工具')!;
+    expect(calculateCraftTime(recipe, false, 80)).toBe(40);
+  });
+
+  it('combines penalties: low energy + no workstation', () => {
+    const book = createRecipeBook();
+    const recipe = book.recipes.find((r) => r.id === '修理工具')!;
+    expect(calculateCraftTime(recipe, false, 30)).toBe(60);
+  });
+});
+
+describe('calculateEnergyCost', () => {
+  it('returns -5 at normal energy', () => {
+    expect(calculateEnergyCost(80)).toBe(-5);
+    expect(calculateEnergyCost(51)).toBe(-5);
+  });
+
+  it('returns -8 when energy <= 30', () => {
+    expect(calculateEnergyCost(30)).toBe(-8);
+    expect(calculateEnergyCost(10)).toBe(-8);
+  });
+
+  it('returns -4 when energy > 80 (focus)', () => {
+    expect(calculateEnergyCost(81)).toBe(-4);
+    expect(calculateEnergyCost(100)).toBe(-4);
+  });
+});
+
+describe('calculateSuccessRate', () => {
+  it('returns 100% at normal energy', () => {
+    expect(calculateSuccessRate(80)).toBe(100);
+    expect(calculateSuccessRate(51)).toBe(100);
+  });
+
+  it('returns 50% when energy <= 30', () => {
+    expect(calculateSuccessRate(30)).toBe(50);
+    expect(calculateSuccessRate(10)).toBe(50);
+  });
+
+  it('returns 85% when energy <= 50', () => {
+    expect(calculateSuccessRate(50)).toBe(85);
+    expect(calculateSuccessRate(31)).toBe(85);
+  });
+
+  it('returns 110% capped to 100% when energy > 80', () => {
+    expect(calculateSuccessRate(81)).toBe(100);
+  });
+});
 
 describe('executeCraft', () => {
-  // --- 绳索 ---
-  it('crafts 绳索: consumes 纤维×3, produces 绳索×1', () => {
-    const recipe: CraftingRecipe = {
-      productId: '绳索',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 3 }],
-      station: 'none',
-      craftingTime: 1,
-    };
+  it('deducts materials and produces product on success', () => {
+    const book = createRecipeBook();
     const inv = buildInventory([{ itemId: '纤维', quantity: 5 }]);
-    const { inventory, message } = executeCraft(inv, recipe);
+    const result = executeCraft(book, inv, '绳索', false, 80, 50);
 
-    // Fibers consumed: 5 - 3 = 2
-    const fiber = inventory.find((s) => s.itemId === '纤维');
-    expect(fiber?.quantity).toBe(2);
-
-    // Rope produced: 1
-    const rope = inventory.find((s) => s.itemId === '绳索');
-    expect(rope?.quantity).toBe(1);
-
-    expect(message).toContain('成功');
+    expect(result.success).toBe(true);
+    expect(getItemQuantity(result.inventory, '纤维')).toBe(2);
+    expect(getItemQuantity(result.inventory, '绳索')).toBe(1);
   });
 
-  // --- 石斧: 木材×2 + 石材×1 → 工具 ---
-  it('crafts 石斧: consumes materials, produces 石刀', () => {
-    const recipe = findRecipe('石刀', 'none', (ings) =>
-      ings.some((i) => i.itemId === '石材'),
-    )!;
-    const inv = buildInventory([
-      { itemId: '木材', quantity: 3 },
-      { itemId: '石材', quantity: 2 },
-    ]);
-    const { inventory } = executeCraft(inv, recipe);
-
-    const wood = inventory.find((s) => s.itemId === '木材');
-    expect(wood?.quantity).toBe(1); // 3 - 2
-
-    const stone = inventory.find((s) => s.itemId === '石材');
-    expect(stone?.quantity).toBe(1); // 2 - 1
-
-    const tool = inventory.find((s) => s.itemId === '石刀');
-    expect(tool?.quantity).toBe(1);
-  });
-
-  // --- 药膏: 草药×2 → 草药 ---
-  it('crafts 药膏: consumes 草药×2, produces 药膏×1', () => {
-    const recipe = findRecipe('药膏', 'none', (ings) =>
-      ings.length === 1 && ings[0].itemId === '草药' && ings[0].quantity === 2,
-    )!;
-    const inv = buildInventory([{ itemId: '草药', quantity: 4 }]);
-    const { inventory } = executeCraft(inv, recipe);
-
-    // 2 consumed, 1 produced => net -1
-    const herb = inventory.find((s) => s.itemId === '草药');
-    expect(herb?.quantity).toBe(2); // 4 - 2
-    const medicine = inventory.find((s) => s.itemId === '药膏');
-    expect(medicine?.quantity).toBe(1);
-  });
-
-  // --- 火把: 木材×1 + 纤维×2 → 工具 ---
-  it('crafts 火把: consumes 木材 and 纤维, produces 火把', () => {
-    const recipe = findRecipe('火把', 'none', (ings) =>
-      ings.some((i) => i.itemId === '木材' && i.quantity === 1) &&
-      ings.some((i) => i.itemId === '纤维' && i.quantity === 2),
-    )!;
-    const inv = buildInventory([
-      { itemId: '木材', quantity: 3 },
-      { itemId: '纤维', quantity: 5 },
-    ]);
-    const { inventory } = executeCraft(inv, recipe);
-
-    // Materials consumed
-    expect(inventory.find((s) => s.itemId === '木材')?.quantity).toBe(2); // 3 - 1
-    expect(inventory.find((s) => s.itemId === '纤维')?.quantity).toBe(3); // 5 - 2
-
-    // Torch produced
-    const torch = inventory.find((s) => s.itemId === '火把');
-    expect(torch?.quantity).toBe(1);
-  });
-
-  // --- Weight verification after crafting ---
-  it('updates weight correctly after crafting', () => {
-    const recipe: CraftingRecipe = {
-      productId: '绳索',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 3 }],
-      station: 'none',
-      craftingTime: 1,
-    };
+  it('consumes time correctly', () => {
+    const book = createRecipeBook();
     const inv = buildInventory([{ itemId: '纤维', quantity: 3 }]);
-    const weightBefore = calculateWeight(inv); // 3 * 1 = 3
-    expect(weightBefore).toBe(3);
-
-    const { inventory } = executeCraft(inv, recipe);
-    const weightAfter = calculateWeight(inventory); // 绳索 weight=3
-    expect(weightAfter).toBe(3);
-    expect(inventory.some((s) => s.itemId === '绳索')).toBe(true);
+    const result = executeCraft(book, inv, '绳索', false, 80, 100);
+    expect(result.timeElapsed).toBe(20);
   });
 
-  // --- Cannot craft with insufficient materials ---
-  it('throws when materials insufficient', () => {
-    const recipe: CraftingRecipe = {
-      productId: '绳索',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 3 }],
-      station: 'none',
-      craftingTime: 1,
-    };
+  it('fails gracefully when energy too low (roll fails)', () => {
+    const book = createRecipeBook();
+    const inv = buildInventory([{ itemId: '纤维', quantity: 3 }]);
+    const result = executeCraft(book, inv, '绳索', false, 30, 60);
+
+    expect(result.success).toBe(false);
+    expect(getItemQuantity(result.inventory, '纤维')).toBe(3);
+    expect(result.timeElapsed).toBe(30);
+    expect(result.energyCost).toBe(-8);
+  });
+
+  it('does not consume materials on failure', () => {
+    const book = createRecipeBook();
+    const inv = buildInventory([{ itemId: '木材', quantity: 2 }, { itemId: '石材', quantity: 1 }]);
+    const result = executeCraft(book, inv, '石斧', false, 30, 60);
+
+    expect(result.success).toBe(false);
+    expect(getItemQuantity(result.inventory, '木材')).toBe(2);
+    expect(getItemQuantity(result.inventory, '石材')).toBe(1);
+  });
+
+  it('throws when preconditions not met', () => {
+    const book = createRecipeBook();
     const inv = buildInventory([{ itemId: '纤维', quantity: 2 }]);
-    expect(() => executeCraft(inv, recipe)).toThrow();
+    expect(() => executeCraft(book, inv, '绳索', false, 80)).toThrow();
   });
 
-  // --- Crafting respects stack limits by creating new slots ---
-  it('creates new stack when product already at stack limit', () => {
-    const recipe: CraftingRecipe = {
-      productId: '工具',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 1 }],
-      station: 'none',
-      craftingTime: 1,
-    };
-    // 工具 stackLimit=1, already have 1 → new slot created
-    const inv = [slot('工具', 1), slot('纤维', 1)];
-    const { inventory } = executeCraft(inv, recipe);
-    const tools = inventory.filter((s) => s.itemId === '工具');
-    expect(tools).toHaveLength(2);
-    expect(tools[0].quantity).toBe(1);
-    expect(tools[1].quantity).toBe(1);
-  });
-
-  // --- Pure function check ---
   it('does not mutate original inventory', () => {
-    const recipe: CraftingRecipe = {
-      productId: '绳索',
-      productQuantity: 1,
-      ingredients: [{ itemId: '纤维', quantity: 3 }],
-      station: 'none',
-      craftingTime: 1,
-    };
-    const inv = buildInventory([{ itemId: '纤维', quantity: 3 }]);
+    const book = createRecipeBook();
+    const inv = buildInventory([{ itemId: '纤维', quantity: 5 }]);
     const originalJson = JSON.stringify(inv);
-    executeCraft(inv, recipe);
+    executeCraft(book, inv, '绳索', false, 80, 100);
     expect(JSON.stringify(inv)).toBe(originalJson);
   });
 
-  // --- 简易营地: 木材×4 + 纤维×2 → 工具 ---
-  it('crafts 简易营地: consumes 木材×4 + 纤维×2, produces 简易营地', () => {
-    const recipe = findRecipe('简易营地', 'none', (ings) =>
-      ings.some((i) => i.itemId === '木材' && i.quantity === 4),
-    )!;
-    const inv = buildInventory([
-      { itemId: '木材', quantity: 5 },
-      { itemId: '纤维', quantity: 3 },
-    ]);
-    const { inventory } = executeCraft(inv, recipe);
-
-    expect(inventory.find((s) => s.itemId === '木材')?.quantity).toBe(1); // 5 - 4
-    expect(inventory.find((s) => s.itemId === '纤维')?.quantity).toBe(1); // 3 - 2
-    expect(inventory.find((s) => s.itemId === '简易营地')?.quantity).toBe(1);
-  });
-
-  // --- Tier 1: 皮甲 ---
-  it('crafts 皮甲 at workbench: consumes 布料×2 + 纤维×2, produces 皮甲', () => {
-    const recipe = findRecipe('皮甲', 'workbench', (ings) =>
-      ings.some((i) => i.itemId === '布料' && i.quantity === 2),
-    )!;
+  it('crafts workbench recipe with workstation', () => {
+    const book = createRecipeBook();
+    const updated = unlockBlueprint(book, '皮甲蓝图');
     const inv = buildInventory([
       { itemId: '布料', quantity: 3 },
       { itemId: '纤维', quantity: 3 },
     ]);
-    const { inventory } = executeCraft(inv, recipe);
+    const result = executeCraft(updated, inv, '皮甲', true, 80, 100);
 
-    expect(inventory.find((s) => s.itemId === '布料')?.quantity).toBe(1); // 3 - 2
-    expect(inventory.find((s) => s.itemId === '纤维')?.quantity).toBe(1); // 3 - 2
-    expect(inventory.find((s) => s.itemId === '皮甲')?.quantity).toBe(1);
+    expect(result.success).toBe(true);
+    expect(getItemQuantity(result.inventory, '布料')).toBe(1);
+    expect(getItemQuantity(result.inventory, '纤维')).toBe(1);
+    expect(getItemQuantity(result.inventory, '皮甲')).toBe(1);
+  });
+});
+
+describe('blueprint unlock integration', () => {
+  it('full workflow: unlock → getAvailable → canCraft → executeCraft', () => {
+    let book = createRecipeBook();
+
+    const before = getAvailableRecipes(book, book.unlockedBlueprints);
+    expect(before.find((r) => r.id === '木筏')).toBeUndefined();
+
+    book = unlockBlueprint(book, '木筏蓝图');
+
+    const after = getAvailableRecipes(book, book.unlockedBlueprints);
+    expect(after.find((r) => r.id === '木筏')).toBeDefined();
+
+    const inv = buildInventory([
+      { itemId: '木材', quantity: 3 },
+      { itemId: '绳索', quantity: 2 },
+    ]);
+    const check = canCraft(book, inv, '木筏', true);
+    expect(check.canCraft).toBe(true);
+
+    const result = executeCraft(book, inv, '木筏', true, 80, 100);
+    expect(result.success).toBe(true);
+    expect(getItemQuantity(result.inventory, '木筏')).toBe(1);
+  });
+});
+
+describe('P2.3 action-level crafting', () => {
+  describe('calculateCraftTimeById', () => {
+    it('returns 20 minutes at normal energy', () => {
+      const book = createRecipeBook();
+      expect(calculateCraftTimeById('绳索', book, false, 80)).toBe(20);
+    });
+
+    it('returns 30 minutes when energy <= 50', () => {
+      const book = createRecipeBook();
+      expect(calculateCraftTimeById('绳索', book, false, 50)).toBe(30);
+      expect(calculateCraftTimeById('绳索', book, false, 20)).toBe(30);
+    });
+
+    it('throws for non-existent recipe', () => {
+      const book = createRecipeBook();
+      expect(() => calculateCraftTimeById('不存在', book, false, 80)).toThrow('不存在');
+    });
+  });
+
+  describe('calculateCraftEnergyCostById', () => {
+    it('returns -5 at normal energy', () => {
+      expect(calculateCraftEnergyCostById('绳索', 60)).toBe(-5);
+    });
+
+    it('returns -8 when energy <= 30', () => {
+      expect(calculateCraftEnergyCostById('绳索', 30)).toBe(-8);
+    });
+
+    it('returns -4 when energy > 80', () => {
+      expect(calculateCraftEnergyCostById('绳索', 90)).toBe(-4);
+    });
+  });
+
+  describe('calculateCraftSuccessRateById', () => {
+    it('returns 100 at normal energy', () => {
+      expect(calculateCraftSuccessRateById('绳索', 60)).toBe(100);
+    });
+
+    it('returns 50 when energy <= 30', () => {
+      expect(calculateCraftSuccessRateById('绳索', 20)).toBe(50);
+    });
+
+    it('returns 85 when energy 31-50', () => {
+      expect(calculateCraftSuccessRateById('绳索', 40)).toBe(85);
+    });
+  });
+
+  describe('executeCraftAction', () => {
+    function makeState(energy: number, mood: number, items: { itemId: string; quantity: number }[]) {
+      const book = createRecipeBook();
+      const inventory = buildInventory(items);
+      return { recipeBook: book, inventory, playerEnergy: energy, playerMood: mood };
+    }
+
+    it('deducts materials and produces product on success', () => {
+      const state = makeState(80, 70, [{ itemId: '纤维', quantity: 5 }]);
+      const result = executeCraftAction(state, '绳索', false, () => 0.1);
+      expect(result.success).toBe(true);
+      expect(getItemQuantity(result.inventory, '纤维')).toBe(2);
+      expect(getItemQuantity(result.inventory, '绳索')).toBe(1);
+      expect(result.productQuantity).toBe(1);
+    });
+
+    it('consumes time and energy on failure', () => {
+      const state = makeState(30, 70, [{ itemId: '纤维', quantity: 3 }]);
+      const result = executeCraftAction(state, '绳索', false, () => 0.99);
+      expect(result.success).toBe(false);
+      expect(result.timeElapsed).toBe(30);
+      expect(result.energyCost).toBe(-8);
+      expect(result.productQuantity).toBe(0);
+    });
+
+    it('preserves materials on failure', () => {
+      const state = makeState(30, 70, [{ itemId: '纤维', quantity: 3 }]);
+      const result = executeCraftAction(state, '绳索', false, () => 0.99);
+      expect(result.success).toBe(false);
+      expect(getItemQuantity(result.inventory, '纤维')).toBe(3);
+    });
+
+    it('applies mood <= 30 output penalty (-30%)', () => {
+      const state = makeState(80, 20, [{ itemId: '纤维', quantity: 5 }]);
+      const result = executeCraftAction(state, '绳索', false, () => 0.01);
+      expect(result.success).toBe(true);
+      expect(result.productQuantity).toBe(1);
+    });
+
+    it('no mood penalty when mood > 30', () => {
+      const state = makeState(80, 50, [{ itemId: '纤维', quantity: 5 }]);
+      const result = executeCraftAction(state, '绳索', false, () => 0.01);
+      expect(result.success).toBe(true);
+      expect(result.productQuantity).toBe(1);
+    });
+
+    it('energy > 80 gets +10% success rate (capped at 100)', () => {
+      const state = makeState(90, 70, [{ itemId: '纤维', quantity: 3 }]);
+      const result = executeCraftAction(state, '绳索', false, () => 0.99);
+      expect(result.success).toBe(true);
+    });
+
+    it('throws when preconditions not met', () => {
+      const state = makeState(80, 70, [{ itemId: '纤维', quantity: 2 }]);
+      expect(() => executeCraftAction(state, '绳索', false, () => 0.5)).toThrow();
+    });
+
+    it('does not mutate original inventory', () => {
+      const state = makeState(80, 70, [{ itemId: '纤维', quantity: 5 }]);
+      const originalJson = JSON.stringify(state.inventory);
+      executeCraftAction(state, '绳索', false, () => 0.01);
+      expect(JSON.stringify(state.inventory)).toBe(originalJson);
+    });
   });
 });

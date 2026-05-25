@@ -1,23 +1,25 @@
 // ============================================================
 // CardLand Derived Selectors
-// Computed hooks combining multiple stores for UI consumption.
+// Computed hooks combining unified store for UI consumption.
 // ============================================================
 
 import { useMemo } from 'react';
-import { usePlayerStore } from './playerStore';
 import { useGameStore } from './gameStore';
-import { checkWeightLimit, calculateWeight } from '@engine/inventory';
+import { checkWeightLimit, calculateWeight, getItemDef } from '@engine/inventory';
 import { applyThresholdEffects, applyLinkageEffects } from '@engine/attributes';
 import { getAvailableStrategies } from '@engine/combat';
 import { getMapPointById, getMovementCost } from '@data/map';
 import type { SubZoneId } from '@data/types';
+import type { CombatStrategyId } from '@data/types';
+
+const weightOf = (id: string) => getItemDef(id as import('@data/types').ItemId)?.weight ?? 0;
 
 /** Weight calculation: current weight, ratio, tier, penalties */
 export function useWeightCalc() {
-  const inventory = usePlayerStore((s) => s.inventory);
+  const inventory = useGameStore((s) => s.inventory);
   return useMemo(() => {
-    const weight = calculateWeight(inventory);
-    const check = checkWeightLimit(inventory);
+    const weight = calculateWeight(inventory, weightOf);
+    const check = checkWeightLimit(inventory, weightOf);
     return {
       weight,
       ratio: check.ratio,
@@ -30,7 +32,7 @@ export function useWeightCalc() {
 
 /** Current threshold and linkage effects for all attributes */
 export function useAttributeEffects() {
-  const attributes = usePlayerStore((s) => s.attributes);
+  const attributes = useGameStore((s) => s.attributes);
   return useMemo(() => {
     const thresholds = applyThresholdEffects(attributes);
     const linkages = applyLinkageEffects(attributes);
@@ -40,14 +42,14 @@ export function useAttributeEffects() {
 
 /** Available actions based on position, stamina, weight, and game phase */
 export function useAvailableActions() {
-  const attributes = usePlayerStore((s) => s.attributes);
-  const inventory = usePlayerStore((s) => s.inventory);
-  const currentPosition = useGameStore((s) => s.gameState.currentPosition);
+  const attributes = useGameStore((s) => s.attributes);
+  const inventory = useGameStore((s) => s.inventory);
+  const currentPosition = useGameStore((s) => s.currentPosition);
   const gamePhase = useGameStore((s) => s.gamePhase);
 
   return useMemo(() => {
     const stamina = attributes['体力值'] ?? 0;
-    const weightCheck = checkWeightLimit(inventory);
+    const weightCheck = checkWeightLimit(inventory, weightOf);
     const point = getMapPointById(currentPosition);
 
     type ActionInfo = {
@@ -67,7 +69,7 @@ export function useAvailableActions() {
         { type: 'action', id: 'craft', label: '制作', available: stamina >= 5, reason: '体力不足' }
       );
 
-      const allSubZones: SubZoneId[] = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'];
+      const allSubZones: SubZoneId[] = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D1', 'D2', 'D3', 'D4', 'E1', 'E2', 'E3', 'E4', 'F1', 'F2', 'F3', 'F4'];
       for (const sz of allSubZones) {
         if (sz === point?.subZone) continue;
         const cost = getMovementCost(point?.subZone ?? 'A1', sz);
@@ -76,8 +78,8 @@ export function useAvailableActions() {
             type: 'move',
             id: `move-${sz}`,
             label: `移动到 ${sz}`,
-            available: stamina >= cost,
-            reason: stamina < cost ? `需要体力 ${cost}` : undefined,
+            available: stamina >= cost.staminaCost,
+            reason: stamina < cost.staminaCost ? `需要体力 ${cost.staminaCost}` : undefined,
           });
         }
       }
@@ -89,7 +91,9 @@ export function useAvailableActions() {
         '闪避姿态',
         '格挡',
         '精准攻击',
+        '恐吓',
         '撤退',
+        '潜行击',
       ];
       for (const s of allStrategies) {
         actions.push({
@@ -105,6 +109,3 @@ export function useAvailableActions() {
     return actions;
   }, [attributes, inventory, currentPosition, gamePhase]);
 }
-
-import type { CombatStrategyId } from '@data/types';
-

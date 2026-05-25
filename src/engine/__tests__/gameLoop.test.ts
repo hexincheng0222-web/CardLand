@@ -13,19 +13,19 @@ describe('startNewGame', () => {
     expect(state.turnNumber).toBe(1);
     expect(state.gameOver.isOver).toBe(false);
 
-    const food = state.inventory.find((s) => s.itemId === '食物');
+    const food = state.inventory.slots.find((s) => s.itemId === '食物');
     expect(food?.quantity).toBe(3);
-    const water = state.inventory.find((s) => s.itemId === '水');
+    const water = state.inventory.slots.find((s) => s.itemId === '水');
     expect(water?.quantity).toBe(2);
-    const herb = state.inventory.find((s) => s.itemId === '草药');
+    const herb = state.inventory.slots.find((s) => s.itemId === '草药');
     expect(herb?.quantity).toBe(1);
   });
 
   it('探索型 starts with rope, tool, and treasure map', () => {
     const state = startNewGame('探索型', 99);
-    const rope = state.inventory.find((s) => s.itemId === '绳索');
-    const tool = state.inventory.find((s) => s.itemId === '工具');
-    const map = state.inventory.find((s) => s.itemId === '藏宝图');
+    const rope = state.inventory.slots.find((s) => s.itemId === '绳索');
+    const tool = state.inventory.slots.find((s) => s.itemId === '工具');
+    const map = state.inventory.slots.find((s) => s.itemId === '藏宝图');
     expect(rope?.quantity).toBe(2);
     expect(tool?.quantity).toBe(1);
     expect(map?.quantity).toBe(1);
@@ -33,9 +33,9 @@ describe('startNewGame', () => {
 
   it('制作型 starts with wood and fiber', () => {
     const state = startNewGame('制作型', 7);
-    const wood = state.inventory.find((s) => s.itemId === '木材');
-    const fiber = state.inventory.find((s) => s.itemId === '纤维');
-    const toolCount = state.inventory
+    const wood = state.inventory.slots.find((s) => s.itemId === '木材');
+    const fiber = state.inventory.slots.find((s) => s.itemId === '纤维');
+    const toolCount = state.inventory.slots
       .filter((s) => s.itemId === '工具')
       .reduce((sum, s) => sum + s.quantity, 0);
     expect(wood?.quantity).toBe(2);
@@ -45,8 +45,8 @@ describe('startNewGame', () => {
 
   it('战斗型 starts with tool and herbs', () => {
     const state = startNewGame('战斗型', 13);
-    const tool = state.inventory.find((s) => s.itemId === '工具');
-    const herb = state.inventory.find((s) => s.itemId === '草药');
+    const tool = state.inventory.slots.find((s) => s.itemId === '工具');
+    const herb = state.inventory.slots.find((s) => s.itemId === '草药');
     expect(tool?.quantity).toBe(1);
     expect(herb?.quantity).toBe(2);
   });

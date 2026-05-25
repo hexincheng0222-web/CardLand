@@ -14,14 +14,14 @@ function getItemIcon(itemId: string): string {
 }
 
 export function HandSelectionScreen() {
-  const startNewGame = useGameStore((s) => s.startNewGame);
+  const startGame = useGameStore((s) => s.startGame);
   const setGamePhase = useGameStore((s) => s.setGamePhase);
 
   const handleSelect = useCallback(
     (handType: string) => {
-      startNewGame(handType as '生存型' | '探索型' | '制作型' | '战斗型');
+      startGame(handType as '生存型' | '探索型' | '制作型' | '战斗型');
     },
-    [startNewGame]
+    [startGame]
   );
 
   const handleBack = useCallback(() => {

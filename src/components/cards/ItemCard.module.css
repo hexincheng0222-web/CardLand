@@ -1,0 +1,67 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  min-width: 80px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.icon {
+  font-size: 1.5rem;
+}
+
+.quantity {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #999);
+}
+
+.name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.bottomRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 4px;
+}
+
+.weight {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #999);
+}
+
+.shelfBar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-tertiary, #333);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.shelfFill {
+  height: 100%;
+  background: var(--color-green, #4ade80);
+  transition: width 0.3s ease;
+}

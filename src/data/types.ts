@@ -3,7 +3,7 @@
 // Authoritative types for all game data
 // ============================================================
 
-// --- Core Attributes (7 total, NO 体温) ---
+// --- Core Attributes (9 total: 7 original + 负重 + 体温) ---
 export type AttributeId =
   | '饱食度'
   | '口渴度'
@@ -11,7 +11,9 @@ export type AttributeId =
   | '健康值'
   | '精力值'
   | '污垢'
-  | '心情';
+  | '心情'
+  | '负重'
+  | '体温';
 
 export interface AttributeDef {
   id: AttributeId;
@@ -20,52 +22,106 @@ export interface AttributeDef {
   initialValue: number;
   maxValue: number;
   minValue: number;
-  naturalDecayPerTurn: number; // positive = decrease, negative = increase
+  naturalDecayPerTurn?: number; // positive = decrease, negative = increase
   isNegativeWhenHigh: boolean; // true for 污垢 (high is bad)
 }
 
-// --- Items (16+ types per 物资图鉴 v0.9) ---
+// --- Items (per 物资图鉴 v1.0) ---
 export type ItemId =
+  // 生存物资
   | '食物'
   | '水'
   | '草药'
   | '解毒草'
   | '蛇胆'
+  // 食材（可腐烂）
+  | '生肉'
+  | '熟肉'
+  | '蛋'
+  | '蟹贝'
+  | '椰子'
+  // 建材物资
   | '木材'
   | '石材'
   | '纤维'
   | '布料'
   | '粘土'
+  // 矿石物资
   | '铁矿'
   | '硫磺'
   | '黑曜石'
+  // 特殊物资
   | '绳索'
   | '金属件'
   | '高级材料'
   | '工具'
   | '藏宝图'
   | '渔网'
-  | '石刀'
+  | '盐块'
+  | '兽皮'
+  // 装备
+  | '石斧'
   | '木矛'
   | '布甲'
   | '皮甲'
+  // 工具/消耗品
   | '火把'
   | '修理工具'
+  | '木筏'
+  | '捕鱼陷阱'
+  // 建筑
   | '简易营地'
   | '工作台'
+  | '加固营地'
+  | '窑炉'
+  | '熔炉'
+  // 药剂
   | '药膏'
   | '解毒剂'
-  | '木筏'
-  | '捕鱼陷阱';
+  // 冶炼工具
+  | '铁斧'
+  | '铁镐'
+  | '黑曜石刀'
+  // 其他
+  | '陶罐'
+  | '绷带'
+  | '火药'
+  | '扩容背包';
+
+export type ItemCategory = '生存' | '食材' | '建材' | '矿石' | '特殊' | '装备' | '药剂' | '工具' | '建筑';
 
 export interface ItemDef {
   id: ItemId;
   name: string;
   icon: string;
-  category: '生存' | '建材' | '矿石' | '特殊' | '装备' | '药剂' | '工具' | '建筑';
-  weight: number;       // per 物资图鉴 v0.9 (authoritative)
+  category: ItemCategory;
+  weight: number;         // per 物资图鉴 v1.0 (authoritative)
   stackLimit: number;
   description: string;
+  shelfLife?: number;     // 保质期（小时），null/undefined = 不腐烂
+  repairable?: boolean;   // 是否可修理（耐久度系统）
+}
+
+// --- Perishable Items (food spoilage system) ---
+export interface PerishableItem {
+  itemId: ItemId;
+  quantity: number;
+  createdAt: number;      // totalMinutes from GameClock when created
+  preservedBy?: PreservationMethod; // 保鲜处理方式
+  adjustedShelfLife?: number; // 经保鲜处理后的保质期（小时）
+}
+
+export type PreservationMethod = '烹饪' | '腌制' | '庇护所Lv2';
+
+export interface SpoilageResult {
+  spoiledItems: { itemIndex: number; itemId: ItemId; penalty: SpoilagePenalty }[];
+  totalChecked: number;
+}
+
+export interface SpoilagePenalty {
+  type: '中毒' | '效果衰减' | '无';
+  poisonChance?: number;  // 0-1, 中毒概率
+  effectReduction?: number; // 0-1, 效果衰减比例
 }
 
 // --- Crafting Recipes ---
@@ -81,9 +137,29 @@ export interface CraftingRecipe {
   effect?: string;
 }
 
-// --- Zones A and B only (16 points each = 32 total) ---
-export type ZoneId = 'A' | 'B'; // V1 scope only
-export type SubZoneId = 'A1' | 'A2' | 'A3' | 'A4' | 'B1' | 'B2' | 'B3' | 'B4';
+// --- Recipe (P1.6 blueprint-based crafting system) ---
+export type RecipeCategory = '装备' | '工具' | '建筑' | '药剂' | '材料';
+
+export interface Recipe {
+  id: string;
+  productId: string;
+  productQuantity: number;
+  ingredients: { itemId: string; quantity: number }[];
+  station: CraftingStation;
+  baseTime: number;           // minutes
+  blueprintRequired: string | null; // null = always available
+  category: RecipeCategory;
+}
+
+// --- All 6 zones (16 points each = 96 total) ---
+export type ZoneId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+export type SubZoneId =
+  | 'A1' | 'A2' | 'A3' | 'A4'
+  | 'B1' | 'B2' | 'B3' | 'B4'
+  | 'C1' | 'C2' | 'C3' | 'C4'
+  | 'D1' | 'D2' | 'D3' | 'D4'
+  | 'E1' | 'E2' | 'E3' | 'E4'
+  | 'F1' | 'F2' | 'F3' | 'F4';
 export type Direction = 'north' | 'south' | 'east' | 'west';
 export type PointType = '资源点' | '休息点' | '事件点' | '危险点' | '障碍点';
 
@@ -130,7 +206,7 @@ export interface ChoiceEvent {
 }
 
 // --- Weather (4 types only, V1) ---
-export type WeatherId = '晴' | '阴' | '雨' | '暴雨';
+export type WeatherId = '晴' | '阴' | '雨' | '暴雨' | '大雾' | '酷热';
 
 export interface WeatherDef {
   id: WeatherId;
@@ -144,16 +220,31 @@ export interface WeatherDef {
   };
 }
 
-// --- Status Effects (8 total: 5 negative + 3 positive) ---
+// --- Status Effects (21 total: 13 negative + 8 positive) ---
 export type StatusEffectId =
+  // Negative (13)
   | '中毒'
   | '感染'
+  | '灼伤'
   | '迷路'
+  | '溺水'
+  | '蛇毒'
+  | '疾病'
   | '疲惫'
+  | '沮丧'
+  | '失温症'
+  | '中暑'
+  | '湿身'
+  | '饮食单调'
+  // Positive (8)
   | '饱腹'
   | '精神饱满'
   | '专注'
-  | '防护';
+  | '清爽'
+  | '愉悦'
+  | '防护'
+  | '探索者之眼'
+  | '暖身';
 
 export interface StatusEffectDef {
   id: StatusEffectId;
@@ -167,14 +258,16 @@ export interface StatusEffectDef {
   removalMethods: string[];
 }
 
-// --- Combat Strategies (6 total, V1 - NO 恐吓/潜行击) ---
+// --- Combat Strategies (8 total, V1) ---
 export type CombatStrategyId =
   | '普通攻击'
   | '猛击'
   | '闪避姿态'
   | '格挡'
   | '精准攻击'
-  | '撤退';
+  | '恐吓'
+  | '撤退'
+  | '潜行击';
 
 export interface CombatStrategyDef {
   id: CombatStrategyId;
@@ -189,7 +282,22 @@ export interface CombatStrategyDef {
   soundLevel: 'silent' | 'medium' | 'loud';
   description: string;
   requirements: string[];
+  /** 恐吓: 50% chance to scare beasts away (no loot) */
+  isIntimidate?: boolean;
+  /** 潜行击: guaranteed first strike, +20% dodge */
+  stealthFirstStrike?: boolean;
 }
+
+// --- Noise System ---
+export type NoiseLevel = 'none' | 'small' | 'medium' | 'large';
+
+export type NoiseAction =
+  | '普通移动'
+  | '采集'
+  | '采矿'
+  | '砍伐'
+  | '战斗'
+  | '潜行移动';
 
 // --- Enemy Tiers (3 tiers) ---
 export type EnemyTier = 'Small' | 'Medium' | 'Large';

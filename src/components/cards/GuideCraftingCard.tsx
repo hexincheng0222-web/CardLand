@@ -111,7 +111,7 @@ export function GuideCraftingCard({ attributes, recipes, survivalStatus }: Guide
                   <div className={styles.product}>
                     <span className={styles.productIcon}>{recipe.productIcon}</span>
                     <span className={styles.productName}>{recipe.productName}</span>
-                    <span className={styles.time}>⏱️ {recipe.craftingTime}回合</span>
+                    <span className={styles.time}>⏱️ {recipe.craftingTime}分钟</span>
                   </div>
                   <div className={styles.ingredients}>
                     {recipe.ingredients.map((ing, i) => (

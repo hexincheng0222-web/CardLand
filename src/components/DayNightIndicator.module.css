@@ -1,0 +1,59 @@
+/* ============================================================
+   DayNightIndicator — Time period icon with label
+   ============================================================ */
+
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.icon {
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.label {
+  color: var(--text-secondary);
+}
+
+/* Period-specific accents */
+.dawn {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.dawn .label {
+  color: #fbbf24;
+}
+
+.day {
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.15);
+}
+
+.day .label {
+  color: var(--text-secondary);
+}
+
+.dusk {
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+.dusk .label {
+  color: #f97316;
+}
+
+.night {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.night .label {
+  color: #818cf8;
+}

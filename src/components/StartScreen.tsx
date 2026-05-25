@@ -4,8 +4,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@stores/gameStore';
-import { getAllSlotMetadata } from '@stores/persistConfig';
-import { loadFromSlot } from '@stores/persistConfig';
+import { getAllSlotMetadata, loadAndRestore } from '@stores/persistConfig';
 import styles from './StartScreen.module.css';
 
 export function StartScreen() {
@@ -20,7 +19,7 @@ export function StartScreen() {
     const slots = getAllSlotMetadata();
     const saves = slots.filter((s) => s.hasData);
     if (saves.length === 0) return 0;
-    return Math.max(...saves.map((s) => s.turn));
+    return Math.max(...saves.map((s) => s.turnNumber));
   }, []);
 
   const handleNewGame = useCallback(() => {
@@ -35,7 +34,7 @@ export function StartScreen() {
     const target = slotIndex >= 0 ? slotIndex : fallbackIndex;
 
     if (target >= 0) {
-      loadFromSlot(target as 0 | 1 | 2);
+      loadAndRestore(target as 0 | 1 | 2);
     }
   }, []);
 
@@ -74,7 +73,7 @@ export function StartScreen() {
         </button>
         {hasSave && latestSaveTurn > 0 && (
           <span className={styles.saveInfo}>
-            最近存档：第 {latestSaveTurn} 回合
+            最近存档：第 {latestSaveTurn} 天
           </span>
         )}
       </div>

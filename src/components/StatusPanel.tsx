@@ -2,36 +2,51 @@ import { useMemo } from 'react';
 import { Card } from './Card';
 import { AttributeBar } from './AttributeBar';
 import { StatusBadge } from './StatusBadge';
-import { usePlayerStore } from '@stores/playerStore';
 import { useGameStore } from '@stores/gameStore';
 import { useWeightCalc } from '@stores/selectors';
-import { ATTRIBUTES, WEATHER_TYPES, STATUS_EFFECTS } from '@data/v1-spec';
+import { ATTRIBUTES } from '@data/v1-spec';
+import { STATUS_DEFINITIONS, ALL_STATUS_IDS } from '@engine/status';
+import { WEATHER_DEFS } from '@engine/weather';
+import { formatDisplay } from '@engine/clock';
 import styles from './StatusPanel.module.css';
 
 export function StatusPanel() {
-  const attributes = usePlayerStore((s) => s.attributes);
-  const statusEffects = usePlayerStore((s) => s.statusEffects);
-  const weather = useGameStore((s) => s.gameState.weather);
-  const turnNumber = useGameStore((s) => s.gameState.turnNumber);
+  const attributes = useGameStore((s) => s.attributes);
+  const statusEffects = useGameStore((s) => s.statusEffects);
+  const weather = useGameStore((s) => s.weather);
+  const clock = useGameStore((s) => s.clock);
   const weightCalc = useWeightCalc();
 
   const weatherDef = useMemo(() => {
-    return WEATHER_TYPES.find((w) => w.id === weather.current);
+    return WEATHER_DEFS.find((w) => w.id === weather.current);
   }, [weather.current]);
 
   const activeStatuses = useMemo(() => {
-    return statusEffects.map((effect) => {
-      const def = STATUS_EFFECTS.find((s) => s.id === effect.id);
+    const currentTime = clock.totalMinutes;
+    return ALL_STATUS_IDS.map((id) => {
+      const def = STATUS_DEFINITIONS[id];
+      const activeEffect = statusEffects.find(
+        (se) => se.id === id && (se.expiresAt === null || currentTime < se.expiresAt),
+      );
+      const remainingMinutes = activeEffect
+        ? activeEffect.expiresAt != null
+          ? Math.max(0, activeEffect.expiresAt - currentTime)
+          : 0
+        : 0;
       return {
-        ...effect,
-        icon: def?.icon ?? '❓',
-        name: def?.name ?? effect.id,
-        isNegative: def?.isNegative ?? false,
+        id,
+        icon: def.icon,
+        name: def.name,
+        isNegative: def.isNegative,
+        isActive: !!activeEffect,
+        remainingMinutes,
       };
     });
-  }, [statusEffects]);
+  }, [statusEffects, clock.totalMinutes]);
 
   const weightPercent = Math.max(0, Math.min(100, weightCalc.ratio * 100));
+
+  const activeEffects = activeStatuses.filter((s) => s.isActive);
 
   return (
     <div className={styles.panel}>
@@ -41,8 +56,8 @@ export function StatusPanel() {
           <span className={styles.weatherName}>{weatherDef?.name ?? weather.current}</span>
         </div>
         <div className={styles.turn}>
-          <span className={styles.turnLabel}>回合</span>
-          <span className={styles.turnValue}>{turnNumber}</span>
+          <span className={styles.turnLabel}>时间</span>
+          <span className={styles.turnValue}>{formatDisplay(clock)}</span>
         </div>
       </Card>
 
@@ -79,21 +94,19 @@ export function StatusPanel() {
         <span className={styles.weightTier}>{weightCalc.tier}</span>
       </Card>
 
-      {activeStatuses.length > 0 && (
+      {activeEffects.length > 0 && (
         <Card className={styles.statusCard}>
           <h2 className={styles.heading}>⚡ 状态效果</h2>
           <div className={styles.statusList}>
-            {activeStatuses.map((status) => (
+            {activeEffects.map((status) => (
               <div key={status.id} className={styles.statusItem}>
                 <StatusBadge
                   icon={status.icon}
                   name={status.name}
                   isActive={true}
                   isNegative={status.isNegative}
+                  remainingMinutes={status.remainingMinutes}
                 />
-                {status.remainingDuration !== null && (
-                  <span className={styles.duration}>{status.remainingDuration}回合</span>
-                )}
               </div>
             ))}
           </div>

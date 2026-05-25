@@ -11,6 +11,20 @@ export interface CraftingPanelProps {
   }[];
 }
 
+function formatTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}分钟`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${m}m` : `${h}小时`;
+}
+
+const STATION_LABELS: Record<string, string> = {
+  none: '',
+  workbench: '工作台',
+  kiln: '窑炉',
+  furnace: '熔炉',
+};
+
 export function CraftingPanel({ recipes }: CraftingPanelProps) {
   return (
     <Card className={styles.panel}>
@@ -21,7 +35,7 @@ export function CraftingPanel({ recipes }: CraftingPanelProps) {
             <div className={styles.product}>
               <span className={styles.productIcon}>{recipe.productIcon}</span>
               <span className={styles.productName}>{recipe.productName}</span>
-              <span className={styles.time}>⏱️ {recipe.craftingTime}回合</span>
+              <span className={styles.time}>⏱️ {formatTime(recipe.craftingTime)}</span>
             </div>
             <div className={styles.ingredients}>
               {recipe.ingredients.map((ing, i) => (
@@ -33,7 +47,7 @@ export function CraftingPanel({ recipes }: CraftingPanelProps) {
               ))}
             </div>
             {recipe.station !== 'none' && (
-              <div className={styles.station}>📍 需要: {recipe.station}</div>
+              <div className={styles.station}>📍 需要: {STATION_LABELS[recipe.station] ?? recipe.station}</div>
             )}
           </div>
         ))}

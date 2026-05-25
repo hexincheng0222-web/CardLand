@@ -5,6 +5,18 @@ import {
   triggerRandomEvent,
   checkAllRandomEvents,
   determineEncounter,
+  createEventTracker,
+  updateEventTracker,
+  calculateEncounterChance,
+  rollForEvent,
+  generateEvent,
+  processEventResult,
+  calculateRestEncounterChance,
+  calculateNoiseBonus,
+  getActionNoiseLevel,
+  EVENT_ZONE_DANGER_RATES,
+  ENCOUNTER_MODIFIERS,
+  ZONE_EVENT_TEMPLATES,
   type PlayerState,
 } from '../events';
 import { MAP_POINTS, ZONE_DANGER_RATES, MOVEMENT_COSTS } from '@data/map';
@@ -24,6 +36,8 @@ function fullPlayerState(): PlayerState {
       精力值: 100,
       污垢: 0,
       心情: 100,
+      负重: 0,
+      体温: 60,
     },
     inventory: {
       食物: 10,
@@ -31,6 +45,11 @@ function fullPlayerState(): PlayerState {
       草药: 10,
       解毒草: 10,
       蛇胆: 10,
+      生肉: 10,
+      熟肉: 10,
+      蛋: 10,
+      蟹贝: 10,
+      椰子: 10,
       木材: 10,
       石材: 10,
       纤维: 10,
@@ -45,18 +64,30 @@ function fullPlayerState(): PlayerState {
       工具: 10,
       藏宝图: 10,
       渔网: 10,
-      石刀: 0,
+      盐块: 10,
+      兽皮: 10,
+      石斧: 0,
       木矛: 0,
       布甲: 0,
       皮甲: 0,
       火把: 0,
       修理工具: 0,
-      简易营地: 0,
-      工作台: 0,
-      药膏: 0,
-      解毒剂: 0,
       木筏: 0,
       捕鱼陷阱: 0,
+      绷带: 0,
+      火药: 0,
+      简易营地: 0,
+      工作台: 0,
+      加固营地: 0,
+      窑炉: 0,
+      熔炉: 0,
+      药膏: 0,
+      解毒剂: 0,
+      铁斧: 0,
+      铁镐: 0,
+      黑曜石刀: 0,
+      陶罐: 0,
+      扩容背包: 0,
     },
   };
 }
@@ -605,8 +636,8 @@ describe('determineEncounter', () => {
 // ============================================================
 
 describe('Map data integrity', () => {
-  it('should have exactly 32 map points', () => {
-    expect(MAP_POINTS).toHaveLength(32);
+  it('should have exactly 96 map points', () => {
+    expect(MAP_POINTS).toHaveLength(96);
   });
 
   it('should have 16 points in Zone A', () => {
@@ -622,7 +653,7 @@ describe('Map data integrity', () => {
   it('each point should have required fields', () => {
     for (const point of MAP_POINTS) {
       expect(point.id).toBeTruthy();
-      expect(point.zone).toMatch(/^[AB]$/);
+      expect(point.zone).toMatch(/^[A-F]$/);
       expect(point.subZone).toBeTruthy();
       expect(point.direction).toMatch(/^(north|south|east|west)$/);
       expect(point.name).toBeTruthy();
@@ -641,9 +672,340 @@ describe('Map data integrity', () => {
   });
 
   it('A→B movement cost should be 20', () => {
-    expect(MOVEMENT_COSTS['A-B1']).toBe(20);
-    expect(MOVEMENT_COSTS['A-B2']).toBe(20);
-    expect(MOVEMENT_COSTS['A-B3']).toBe(20);
-    expect(MOVEMENT_COSTS['A-B4']).toBe(20);
+    expect(MOVEMENT_COSTS['A-B']).toBe(20);
+  });
+});
+
+// ============================================================
+// P4.3: Event Trigger System Tests
+// ============================================================
+
+describe('EventTracker', () => {
+  it('createEventTracker returns initial state', () => {
+    const tracker = createEventTracker();
+    expect(tracker.lastAction).toBeNull();
+    expect(tracker.consecutiveCount).toBe(0);
+    expect(tracker.currentNoiseLevel).toBe('none');
+    expect(tracker.lastZone).toBeNull();
+  });
+
+  it('updateEventTracker tracks consecutive same actions in same zone', () => {
+    let tracker = createEventTracker();
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    expect(tracker.consecutiveCount).toBe(1);
+    expect(tracker.lastAction).toBe('采集');
+
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    expect(tracker.consecutiveCount).toBe(2);
+
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    expect(tracker.consecutiveCount).toBe(3);
+
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    expect(tracker.consecutiveCount).toBe(4);
+  });
+
+  it('updateEventTracker resets count when action changes', () => {
+    let tracker = createEventTracker();
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    expect(tracker.consecutiveCount).toBe(3);
+
+    tracker = updateEventTracker(tracker, '移动', 'none', 'B');
+    expect(tracker.consecutiveCount).toBe(1);
+    expect(tracker.lastAction).toBe('移动');
+  });
+
+  it('updateEventTracker resets count when zone changes', () => {
+    let tracker = createEventTracker();
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    tracker = updateEventTracker(tracker, '采集', 'small', 'B');
+    expect(tracker.consecutiveCount).toBe(2);
+
+    tracker = updateEventTracker(tracker, '采集', 'small', 'C');
+    expect(tracker.consecutiveCount).toBe(1);
+    expect(tracker.lastZone).toBe('C');
+  });
+
+  it('updateEventTracker updates noise level', () => {
+    let tracker = createEventTracker();
+    tracker = updateEventTracker(tracker, '采集', 'large', 'C');
+    expect(tracker.currentNoiseLevel).toBe('large');
+  });
+});
+
+describe('Zone danger rates', () => {
+  it('all 6 zones have defined danger rates', () => {
+    const zones: (keyof typeof EVENT_ZONE_DANGER_RATES)[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (const zone of zones) {
+      expect(EVENT_ZONE_DANGER_RATES[zone]).toBeDefined();
+      expect(EVENT_ZONE_DANGER_RATES[zone]).toBeGreaterThan(0);
+      expect(EVENT_ZONE_DANGER_RATES[zone]).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('matches design doc values', () => {
+    expect(EVENT_ZONE_DANGER_RATES.A).toBe(0.10);
+    expect(EVENT_ZONE_DANGER_RATES.B).toBe(0.30);
+    expect(EVENT_ZONE_DANGER_RATES.C).toBe(0.35);
+    expect(EVENT_ZONE_DANGER_RATES.D).toBe(0.30);
+    expect(EVENT_ZONE_DANGER_RATES.E).toBe(0.25);
+    expect(EVENT_ZONE_DANGER_RATES.F).toBe(0.40);
+  });
+
+  it('zone F (遗迹) is most dangerous, zone A (海滩) is safest', () => {
+    expect(EVENT_ZONE_DANGER_RATES.F).toBeGreaterThan(EVENT_ZONE_DANGER_RATES.A);
+    expect(EVENT_ZONE_DANGER_RATES.F).toBeGreaterThan(EVENT_ZONE_DANGER_RATES.B);
+    expect(EVENT_ZONE_DANGER_RATES.F).toBeGreaterThan(EVENT_ZONE_DANGER_RATES.C);
+  });
+});
+
+describe('calculateEncounterChance', () => {
+  it('returns zone base rate with no modifiers', () => {
+    const result = calculateEncounterChance('A', '晴', false, 'none', 0);
+    expect(result.zoneBaseRate).toBe(0.10);
+    expect(result.weatherModifier).toBe(0);
+    expect(result.nightModifier).toBe(0);
+    expect(result.noiseModifier).toBe(0);
+    expect(result.consecutiveModifier).toBe(0);
+    expect(result.totalChance).toBe(0.10);
+  });
+
+  it('night adds +15% encounter chance', () => {
+    const day = calculateEncounterChance('B', '晴', false, 'none', 0);
+    const night = calculateEncounterChance('B', '晴', true, 'none', 0);
+    expect(night.nightModifier).toBe(0.15);
+    expect(night.totalChance - day.totalChance).toBeCloseTo(0.15, 5);
+  });
+
+  it('大雾 adds +30% weather modifier', () => {
+    const clear = calculateEncounterChance('B', '晴', false, 'none', 0);
+    const fog = calculateEncounterChance('B', '大雾', false, 'none', 0);
+    expect(fog.weatherModifier).toBe(0.30);
+    expect(fog.totalChance - clear.totalChance).toBeCloseTo(0.30, 5);
+  });
+
+  it('large noise adds +15% noise modifier', () => {
+    const quiet = calculateEncounterChance('B', '晴', false, 'none', 0);
+    const loud = calculateEncounterChance('B', '晴', false, 'large', 0);
+    expect(loud.noiseModifier).toBe(0.15);
+    expect(loud.totalChance - quiet.totalChance).toBeCloseTo(0.15, 5);
+  });
+
+  it('medium noise adds +5% noise modifier', () => {
+    const quiet = calculateEncounterChance('B', '晴', false, 'none', 0);
+    const medium = calculateEncounterChance('B', '晴', false, 'medium', 0);
+    expect(medium.noiseModifier).toBe(0.05);
+    expect(medium.totalChance - quiet.totalChance).toBeCloseTo(0.05, 5);
+  });
+
+  it('small and none noise add 0%', () => {
+    const none = calculateEncounterChance('B', '晴', false, 'none', 0);
+    const small = calculateEncounterChance('B', '晴', false, 'small', 0);
+    expect(small.noiseModifier).toBe(0);
+    expect(small.totalChance).toBe(none.totalChance);
+  });
+
+  it('consecutive actions < 3 add no modifier', () => {
+    const c1 = calculateEncounterChance('B', '晴', false, 'none', 1);
+    const c2 = calculateEncounterChance('B', '晴', false, 'none', 2);
+    expect(c1.consecutiveModifier).toBe(0);
+    expect(c2.consecutiveModifier).toBe(0);
+  });
+
+  it('consecutive actions = 3 adds +10%', () => {
+    const c3 = calculateEncounterChance('B', '晴', false, 'none', 3);
+    expect(c3.consecutiveModifier).toBeCloseTo(0.10, 5);
+  });
+
+  it('consecutive actions = 4 adds +20%', () => {
+    const c4 = calculateEncounterChance('B', '晴', false, 'none', 4);
+    expect(c4.consecutiveModifier).toBeCloseTo(0.20, 5);
+  });
+
+  it('consecutive actions = 5 adds +30%', () => {
+    const c5 = calculateEncounterChance('B', '晴', false, 'none', 5);
+    expect(c5.consecutiveModifier).toBeCloseTo(0.30, 5);
+  });
+
+  it('different zones have different base rates', () => {
+    const a = calculateEncounterChance('A', '晴', false, 'none', 0);
+    const b = calculateEncounterChance('B', '晴', false, 'none', 0);
+    const c = calculateEncounterChance('C', '晴', false, 'none', 0);
+    const f = calculateEncounterChance('F', '晴', false, 'none', 0);
+    expect(a.totalChance).toBeLessThan(b.totalChance);
+    expect(b.totalChance).toBeLessThan(c.totalChance);
+    expect(c.totalChance).toBeLessThan(f.totalChance);
+  });
+
+  it('all modifiers stack correctly', () => {
+    const result = calculateEncounterChance('F', '大雾', true, 'large', 5);
+    expect(result.zoneBaseRate).toBe(0.40);
+    expect(result.weatherModifier).toBe(0.30);
+    expect(result.nightModifier).toBe(0.15);
+    expect(result.noiseModifier).toBe(0.15);
+    expect(result.consecutiveModifier).toBeCloseTo(0.30, 5);
+    expect(result.totalChance).toBe(1); // clamped at 1.0
+  });
+
+  it('total chance is clamped to [0, 1]', () => {
+    const max = calculateEncounterChance('F', '大雾', true, 'large', 100);
+    expect(max.totalChance).toBe(1);
+
+    const min = calculateEncounterChance('A', '晴', false, 'none', 0);
+    expect(min.totalChance).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('rollForEvent', () => {
+  it('returns true when roll < chance', () => {
+    const rng = new SeededRNG(0);
+    expect(rollForEvent(1.0, rng)).toBe(true);
+  });
+
+  it('returns false when chance is 0', () => {
+    const rng = new SeededRNG(0);
+    expect(rollForEvent(0, rng)).toBe(false);
+  });
+
+  it('probability is deterministic with same seed', () => {
+    const rng1 = new SeededRNG(42);
+    const rng2 = new SeededRNG(42);
+    const r1 = rollForEvent(0.5, rng1);
+    const r2 = rollForEvent(0.5, rng2);
+    expect(r1).toBe(r2);
+  });
+});
+
+describe('generateEvent', () => {
+  it('generates a valid event for each zone', () => {
+    const zones: (keyof typeof ZONE_EVENT_TEMPLATES)[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (const zone of zones) {
+      const rng = new SeededRNG(42);
+      const event = generateEvent(zone, rng);
+      expect(event.zone).toBe(zone);
+      expect(event.name).toBeTruthy();
+      expect(event.description).toBeTruthy();
+      expect(event.possibleOutcomes.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('generates zone-appropriate events', () => {
+    const rng = new SeededRNG(0);
+    const beachEvent = generateEvent('A', rng);
+    const templateNames = ZONE_EVENT_TEMPLATES.A.map(t => t.name);
+    expect(templateNames).toContain(beachEvent.name);
+  });
+
+  it('event outcomes have probabilities that sum to ~1', () => {
+    const zones: (keyof typeof ZONE_EVENT_TEMPLATES)[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (const zone of zones) {
+      const rng = new SeededRNG(42);
+      const event = generateEvent(zone, rng);
+      const totalProb = event.possibleOutcomes.reduce((sum, o) => sum + o.probability, 0);
+      expect(totalProb).toBeCloseTo(1, 1);
+    }
+  });
+});
+
+describe('processEventResult', () => {
+  it('returns effects from an event outcome', () => {
+    const rng = new SeededRNG(0);
+    const event = generateEvent('B', rng);
+    const result = processEventResult(event, new SeededRNG(0));
+    expect(result.optionId).toBeTruthy();
+    expect(result.message).toBeTruthy();
+    expect(result.effects).toBeDefined();
+    expect(typeof result.effects.healthChange).toBe('number');
+    expect(typeof result.effects.staminaChange).toBe('number');
+  });
+
+  it('single-outcome event always returns that outcome', () => {
+    const event = {
+      id: 'test',
+      category: 'danger' as const,
+      name: 'Test',
+      description: 'Test event',
+      icon: '⚠️',
+      severity: 'low' as const,
+      zone: 'A' as const,
+      possibleOutcomes: [{
+        id: 'only',
+        label: 'Only',
+        probability: 1,
+        effects: { healthChange: -10, staminaChange: -5, energyChange: 0, itemGains: [], itemLosses: [], statusEffects: [] },
+        message: 'Only outcome',
+      }],
+    };
+    const result = processEventResult(event, new SeededRNG(0));
+    expect(result.optionId).toBe('only');
+    expect(result.message).toBe('Only outcome');
+    expect(result.effects.healthChange).toBe(-10);
+  });
+
+  it('deterministic with same seed', () => {
+    const rng1 = new SeededRNG(42);
+    const rng2 = new SeededRNG(42);
+    const event = generateEvent('C', new SeededRNG(99));
+    const r1 = processEventResult(event, rng1);
+    const r2 = processEventResult(event, rng2);
+    expect(r1.optionId).toBe(r2.optionId);
+    expect(r1.message).toBe(r2.message);
+  });
+});
+
+describe('calculateRestEncounterChance', () => {
+  it('outdoor (level 0) has 15% attack chance', () => {
+    expect(calculateRestEncounterChance(0)).toBe(0.15);
+  });
+
+  it('Lv1 shelter has 5% attack chance', () => {
+    expect(calculateRestEncounterChance(1)).toBe(0.05);
+  });
+
+  it('Lv2+ shelter has 0% attack chance', () => {
+    expect(calculateRestEncounterChance(2)).toBe(0.00);
+    expect(calculateRestEncounterChance(3)).toBe(0.00);
+  });
+});
+
+describe('Noise system integration', () => {
+  it('getActionNoiseLevel returns correct levels', () => {
+    expect(getActionNoiseLevel('普通移动')).toBe('none');
+    expect(getActionNoiseLevel('采集')).toBe('small');
+    expect(getActionNoiseLevel('采矿')).toBe('large');
+    expect(getActionNoiseLevel('砍伐')).toBe('large');
+    expect(getActionNoiseLevel('战斗')).toBe('medium');
+    expect(getActionNoiseLevel('潜行移动')).toBe('none');
+  });
+
+  it('calculateNoiseBonus matches NOISE_ENCOUNTER_BONUS', () => {
+    expect(calculateNoiseBonus('none')).toBe(0);
+    expect(calculateNoiseBonus('small')).toBe(0);
+    expect(calculateNoiseBonus('medium')).toBe(0.05);
+    expect(calculateNoiseBonus('large')).toBe(0.15);
+  });
+
+  it('ENCOUNTER_MODIFIERS constants match design doc', () => {
+    expect(ENCOUNTER_MODIFIERS.NIGHT_BONUS).toBe(0.15);
+    expect(ENCOUNTER_MODIFIERS.FOG_LOST_BONUS).toBe(0.30);
+    expect(ENCOUNTER_MODIFIERS.LARGE_NOISE_BONUS).toBe(0.15);
+    expect(ENCOUNTER_MODIFIERS.CONSECUTIVE_BONUS_PER).toBe(0.10);
+    expect(ENCOUNTER_MODIFIERS.CONSECUTIVE_THRESHOLD).toBe(3);
+    expect(ENCOUNTER_MODIFIERS.GATHER_DANGER).toBe(0.25);
+    expect(ENCOUNTER_MODIFIERS.MOVE_ENCOUNTER).toBe(0.30);
+    expect(ENCOUNTER_MODIFIERS.REST_ATTACK_OUTDOOR).toBe(0.15);
+    expect(ENCOUNTER_MODIFIERS.REST_ATTACK_SHELTER_LV1).toBe(0.05);
+    expect(ENCOUNTER_MODIFIERS.REST_ATTACK_SHELTER_LV2).toBe(0.00);
+  });
+
+  it('noise from combat.ts NOISE_LEVEL_MAP matches ACTION_NOISE_LEVELS', () => {
+    expect(getActionNoiseLevel('普通移动')).toBe('none');
+    expect(getActionNoiseLevel('采集')).toBe('small');
+    expect(getActionNoiseLevel('采矿')).toBe('large');
+    expect(getActionNoiseLevel('砍伐')).toBe('large');
+    expect(getActionNoiseLevel('战斗')).toBe('medium');
+    expect(getActionNoiseLevel('潜行移动')).toBe('none');
   });
 });

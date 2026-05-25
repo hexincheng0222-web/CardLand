@@ -23,10 +23,10 @@ export function StatusEffectPanel() {
           const def = STATUS_EFFECTS.find((d) => d.id === effect.id);
           if (!def) return null;
 
-          const turnsText =
-            effect.remainingDuration === null
+          const remainingText =
+            effect.expiresAt === null
               ? '持续'
-              : `剩余 ${effect.remainingDuration} 回合`;
+              : `剩余 ${Math.max(0, effect.expiresAt - Date.now())} 分钟`;
 
           return (
             <div key={effect.id} className={styles.effectCard}>
@@ -36,7 +36,7 @@ export function StatusEffectPanel() {
                 isActive={true}
                 isNegative={def.isNegative}
               />
-              <span className={styles.turns}>{turnsText}</span>
+              <span className={styles.turns}>{remainingText}</span>
             </div>
           );
         })}

@@ -1,39 +1,37 @@
 import { Card } from '../Card';
+import { ClockDisplay } from '../ClockDisplay';
+import { WeatherDisplay } from '../WeatherDisplay';
+import { DayNightIndicator } from '../DayNightIndicator';
+import type { GameClock, TimeOfDay } from '@engine/clock';
+import type { WeatherId } from '@engine/weather';
 import styles from './GameTitleCard.module.css';
 
 interface GameTitleCardProps {
-  weatherIcon?: string;
-  weatherName?: string;
-  turn?: number;
-  weatherTurnsRemaining?: number;
+  clock?: GameClock;
+  weatherId?: WeatherId;
+  daysRemaining?: number;
+  timeOfDay?: TimeOfDay;
 }
 
-export function GameTitleCard({ weatherIcon, weatherName, turn, weatherTurnsRemaining }: GameTitleCardProps = {}) {
-  const hasWeather = !!weatherIcon || !!weatherName;
-  const hasTurn = turn != null;
-  const hasWeatherCountdown = weatherTurnsRemaining != null;
-
+export function GameTitleCard({ clock, weatherId, daysRemaining, timeOfDay }: GameTitleCardProps = {}) {
   return (
     <Card variant="elevated" className={styles.titleCard}>
       <div className={styles.logo}>🃏</div>
       <h1 className={styles.title}>卡境</h1>
       <p className={styles.subtitle}>CardLand</p>
-      {(hasWeather || hasTurn) && (
-        <div className={styles.weatherRow}>
-          {hasWeather && (
-            <span className={styles.weatherText}>
-              {weatherIcon} {weatherName}
-            </span>
-          )}
-          {hasWeather && hasTurn && <span className={styles.separator}>·</span>}
-          {hasTurn && (
-            <span className={styles.turnText}>回合 {turn}</span>
-          )}
+      {clock && (
+        <div className={styles.infoRow}>
+          <ClockDisplay clock={clock} />
         </div>
       )}
-      {hasWeatherCountdown && (
-        <div className={`${styles.weatherCountdown} ${weatherTurnsRemaining <= 1 ? styles.urgent : ''}`}>
-          ({weatherTurnsRemaining}回合后切换)
+      {timeOfDay && (
+        <div className={styles.infoRow}>
+          <DayNightIndicator timeOfDay={timeOfDay} />
+        </div>
+      )}
+      {weatherId && daysRemaining != null && (
+        <div className={styles.infoRow}>
+          <WeatherDisplay weatherId={weatherId} daysRemaining={daysRemaining} />
         </div>
       )}
     </Card>

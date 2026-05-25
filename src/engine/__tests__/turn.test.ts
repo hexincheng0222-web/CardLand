@@ -14,6 +14,8 @@ import type {
   WeatherState,
   PlayerAction,
 } from '../turn';
+import type { Inventory } from '../inventory';
+import { createInventory } from '../inventory';
 
 // ============================================================
 // Helpers
@@ -22,7 +24,7 @@ import type {
 function makeDefaultState(overrides?: Partial<GameState>): GameState {
   return {
     attributes: defaultAttributes(),
-    inventory: [],
+    inventory: createInventory(),
     currentPosition: 'A1-North',
     weather: { current: '晴', turnsRemaining: 3 },
     turnNumber: 1,
@@ -30,6 +32,14 @@ function makeDefaultState(overrides?: Partial<GameState>): GameState {
     gameOver: { isOver: false, reason: null },
     ...overrides,
   };
+}
+
+function makeInventory(items: { itemId: string; quantity: number }[]): Inventory {
+  const inv = createInventory();
+  for (const item of items) {
+    inv.slots.push({ itemId: item.itemId, quantity: item.quantity });
+  }
+  return inv;
 }
 
 /** RNG that always returns 0 — selects first option in any distribution */
@@ -71,7 +81,7 @@ describe('createSeededRNG', () => {
 // ============================================================
 
 describe('defaultAttributes', () => {
-  it('returns all 7 attributes with initial values from spec', () => {
+  it('returns all 9 attributes with initial values from spec', () => {
     const attrs = defaultAttributes();
     expect(attrs['饱食度']).toBe(60);
     expect(attrs['口渴度']).toBe(60);
@@ -80,6 +90,8 @@ describe('defaultAttributes', () => {
     expect(attrs['精力值']).toBe(80);
     expect(attrs['污垢']).toBe(20);
     expect(attrs['心情']).toBe(70);
+    expect(attrs['负重']).toBe(0);
+    expect(attrs['体温']).toBe(60);
   });
 });
 
@@ -227,12 +239,11 @@ describe('processActionPhase — Move', () => {
     expect(result.actionLogs.some(l => l.includes('体力不足'))).toBe(true);
   });
 
-  it('fails for invalid movement path', () => {
-    const state = makeDefaultState();
+  it('moves from A1 to B2 via zone-level A→B connection', () => {
+    const state = makeDefaultState({ currentPosition: 'A1-North' });
     const action: PlayerAction = { type: 'move', targetSubZone: 'B2' as any };
-    // A1→B2 is not a direct path (only A→B and subzone→subzone)
     const result = processActionPhase(state, action, zeroRng);
-    expect(result.actionLogs.some(l => l.includes('无法从'))).toBe(true);
+    expect(result.actionLogs.some(l => l.includes('无法从'))).toBe(false);
   });
 
   it('moves between zones A→B at cost 20', () => {
@@ -275,22 +286,19 @@ describe('processActionPhase — Gather', () => {
   });
 
   it('returns no resources at location with no outputs', () => {
-    // A1-North is a 休息点 with no outputs
     const state = makeDefaultState({ currentPosition: 'A1-North' });
     const action: PlayerAction = { type: 'gather' };
     const result = processActionPhase(state, action, zeroRng);
-    expect(result.state.inventory).toEqual([]);
+    expect(result.state.inventory.slots).toEqual([]);
   });
 
   it('gathers from resource point with multiple outputs', () => {
-    // A2-East has 食物(1-3), 水(1-3), 纤维(1-2)
     const state = makeDefaultState({ currentPosition: 'A2-East' });
     const rng = createSeededRNG(42);
     const action: PlayerAction = { type: 'gather' };
     const result = processActionPhase(state, action, rng);
 
-    // Should have collected items
-    const totalItems = result.state.inventory.reduce((s, slot) => s + slot.quantity, 0);
+    const totalItems = result.state.inventory.slots.reduce((s, slot) => s + slot.quantity, 0);
     expect(totalItems).toBeGreaterThan(0);
   });
 });
@@ -300,43 +308,37 @@ describe('processActionPhase — Gather', () => {
 // ============================================================
 
 describe('processActionPhase — Craft', () => {
-  it('crafts 绳索 from 纤维 (recipe 0)', () => {
-    // Recipe 0: 纤维×3 → 绳索×1, station: none
+  it('crafts 绳索 from 纤维', () => {
     const state = makeDefaultState({
-      inventory: [
-        { itemId: '纤维', quantity: 3 },
-      ],
+      inventory: makeInventory([{ itemId: '纤维', quantity: 3 }]),
     });
-    const action: PlayerAction = { type: 'craft', recipeIndex: 0 };
+    const action: PlayerAction = { type: 'craft', recipeId: '绳索' };
     const result = processActionPhase(state, action, zeroRng);
 
     expect(result.actionLogs.some(l => l.includes('成功制作 绳索'))).toBe(true);
-    const rope = result.state.inventory.find(s => s.itemId === '绳索');
+    const rope = result.state.inventory.slots.find(s => s.itemId === '绳索');
     expect(rope?.quantity).toBe(1);
   });
 
   it('fails crafting without enough materials', () => {
     const state = makeDefaultState({
-      inventory: [
-        { itemId: '纤维', quantity: 2 }, // need 3
-      ],
+      inventory: makeInventory([{ itemId: '纤维', quantity: 2 }]),
     });
-    const action: PlayerAction = { type: 'craft', recipeIndex: 0 };
+    const action: PlayerAction = { type: 'craft', recipeId: '绳索' };
     const result = processActionPhase(state, action, zeroRng);
 
     expect(result.actionLogs.some(l => l.includes('无法制作') || l.includes('缺少'))).toBe(true);
-    expect(result.state.inventory).toEqual(state.inventory); // unchanged
+    expect(result.state.inventory).toEqual(state.inventory);
   });
 
-  it('crafts recipe requiring workbench station', () => {
-    // Recipe that requires 'none' station should work (all Tier 0)
+  it('crafts 石斧 recipe', () => {
     const state = makeDefaultState({
-      inventory: [
+      inventory: makeInventory([
         { itemId: '木材', quantity: 2 },
         { itemId: '石材', quantity: 1 },
-      ],
+      ]),
     });
-    const action: PlayerAction = { type: 'craft', recipeIndex: 1 }; // 木材×2 + 石材×1 → 工具×1
+    const action: PlayerAction = { type: 'craft', recipeId: '石斧' };
     const result = processActionPhase(state, action, zeroRng);
 
     expect(result.actionLogs.some(l => l.includes('成功制作'))).toBe(true);
@@ -468,14 +470,14 @@ describe('processTurn — complete pipeline', () => {
     const rng = createSeededRNG(42);
     const result = processTurn(state, action, rng);
 
-    // Natural decay: 饱食度-3, 口渴度-5, 精力-2, 污垢+3, 心情-2
+    // Natural decay (per-hour): 饱食度-1, 口渴度-1.5, 精力-0.5, 污垢+1, 心情-0.5
     // Weather 晴: 口渴度-3
     // Gather action: 体力-5
-    expect(result.state.attributes['饱食度']).toBe(57);
-    expect(result.state.attributes['口渴度']).toBe(52);
-    expect(result.state.attributes['精力值']).toBe(78);
-    expect(result.state.attributes['污垢']).toBe(23);
-    expect(result.state.attributes['心情']).toBe(68);
+    expect(result.state.attributes['饱食度']).toBe(59);
+    expect(result.state.attributes['口渴度']).toBe(55.5);
+    expect(result.state.attributes['精力值']).toBe(79.5);
+    expect(result.state.attributes['污垢']).toBe(21);
+    expect(result.state.attributes['心情']).toBe(69.5);
     expect(result.state.attributes['体力值']).toBe(75);
   });
 
@@ -551,34 +553,34 @@ describe('startNewGame', () => {
     expect(state.turnNumber).toBe(1);
     expect(state.gameOver.isOver).toBe(false);
 
-    const foodItem = state.inventory.find(s => s.itemId === '食物');
+    const foodItem = state.inventory.slots.find(s => s.itemId === '食物');
     expect(foodItem?.quantity).toBe(3);
-    const waterItem = state.inventory.find(s => s.itemId === '水');
+    const waterItem = state.inventory.slots.find(s => s.itemId === '水');
     expect(waterItem?.quantity).toBe(2);
-    const herbItem = state.inventory.find(s => s.itemId === '草药');
+    const herbItem = state.inventory.slots.find(s => s.itemId === '草药');
     expect(herbItem?.quantity).toBe(1);
   });
 
   it('creates game with 探索型 hand type', () => {
     const state = startNewGame('探索型', 99);
-    expect(state.inventory.length).toBeGreaterThanOrEqual(5);
-    const mapItem = state.inventory.find(s => s.itemId === '藏宝图');
+    expect(state.inventory.slots.length).toBeGreaterThanOrEqual(5);
+    const mapItem = state.inventory.slots.find(s => s.itemId === '藏宝图');
     expect(mapItem?.quantity).toBe(1);
   });
 
   it('creates game with 制作型 hand type — has wood and fiber', () => {
     const state = startNewGame('制作型', 7);
-    const wood = state.inventory.find(s => s.itemId === '木材');
+    const wood = state.inventory.slots.find(s => s.itemId === '木材');
     expect(wood?.quantity).toBe(2);
-    const fiber = state.inventory.find(s => s.itemId === '纤维');
+    const fiber = state.inventory.slots.find(s => s.itemId === '纤维');
     expect(fiber?.quantity).toBe(2);
   });
 
   it('creates game with 战斗型 hand type', () => {
     const state = startNewGame('战斗型', 13);
-    const tool = state.inventory.find(s => s.itemId === '工具');
+    const tool = state.inventory.slots.find(s => s.itemId === '工具');
     expect(tool?.quantity).toBe(1);
-    const herb = state.inventory.find(s => s.itemId === '草药');
+    const herb = state.inventory.slots.find(s => s.itemId === '草药');
     expect(herb?.quantity).toBe(2);
   });
 

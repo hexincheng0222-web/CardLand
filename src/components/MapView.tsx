@@ -27,10 +27,9 @@ function getLocationIcon(pointType: string | undefined): string {
 }
 
 export function MapView() {
-  const gameState = useGameStore((s) => s.gameState);
-  const processAction = useGameStore((s) => s.processAction);
-  const currentPosition = gameState.currentPosition;
-  const stamina = gameState.attributes['体力值'] ?? 0;
+  const currentPosition = useGameStore((s) => s.currentPosition);
+  const stamina = useGameStore((s) => s.attributes['体力值'] ?? 0);
+  const moveTo = useGameStore((s) => s.moveTo);
 
   const currentPoint = useMemo(() => getMapPointById(currentPosition), [currentPosition]);
   const currentSubZone = currentPoint?.subZone ?? 'A1';
@@ -40,10 +39,10 @@ export function MapView() {
     const moves: { subZone: SubZoneId; cost: number; name: string }[] = [];
     for (const sz of ALL_SUB_ZONES) {
       if (sz === currentSubZone) continue;
-      const cost = getMovementCost(currentSubZone, sz);
-      if (cost !== undefined) {
+      const costEntry = getMovementCost(currentSubZone, sz);
+      if (costEntry !== undefined) {
         const point = getMapPointById(`${sz}-North`) ?? getMapPointById(`${sz}-South`);
-        moves.push({ subZone: sz, cost, name: point?.name ?? sz });
+        moves.push({ subZone: sz, cost: costEntry.staminaCost, name: point?.name ?? sz });
       }
     }
     return moves;
@@ -68,10 +67,13 @@ export function MapView() {
     (direction: string) => {
       const dirIndex = DIRECTION_KEYS.indexOf(direction as DirectionKey);
       if (dirIndex >= 0 && dirIndex < validMoves.length) {
-        processAction({ type: 'move', targetSubZone: validMoves[dirIndex].subZone });
+        const targetPoint = getMapPointById(`${validMoves[dirIndex].subZone}-North`) ?? getMapPointById(`${validMoves[dirIndex].subZone}-South`);
+        if (targetPoint) {
+          moveTo(targetPoint.id);
+        }
       }
     },
-    [validMoves, processAction]
+    [validMoves, moveTo]
   );
 
   const handleMapClick = useCallback(() => {

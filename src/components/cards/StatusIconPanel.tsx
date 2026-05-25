@@ -9,7 +9,7 @@ export interface StatusIconPanelProps {
     isActive: boolean;
     isNegative: boolean;
     details: string;
-    remainingTurns: number;
+    remainingMinutes: number;
   }[];
 }
 
@@ -26,7 +26,7 @@ export function StatusIconPanel({ statuses }: StatusIconPanelProps) {
             isActive={status.isActive}
             isNegative={status.isNegative}
             details={status.details}
-            remainingTurns={status.remainingTurns}
+            remainingMinutes={status.remainingMinutes}
           />
         ))}
       </div>

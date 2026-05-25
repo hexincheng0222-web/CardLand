@@ -10,27 +10,31 @@ import type {
   AttributeLinkage,
   ItemDef,
   CraftingRecipe,
+  Recipe,
   EnemyDef,
   WeatherDef,
   StatusEffectDef,
   CombatStrategyDef,
   InitialHandDef,
   TurnResolutionStep,
+  SpoilagePenalty,
 } from './types';
 import { MAP_POINTS, MOVEMENT_COSTS, ZONE_DANGER_RATES } from './map';
 
 // ============================================================
-// SECTION 1: CORE ATTRIBUTES (7 total, NO 体温)
+// SECTION 1: CORE ATTRIBUTES (9 total)
 // ============================================================
 
 export const ATTRIBUTES: AttributeDef[] = [
-  { id: '饱食度', name: '饱食度', icon: '🍖', initialValue: 60, maxValue: 100, minValue: 0, naturalDecayPerTurn: -3, isNegativeWhenHigh: false },
-  { id: '口渴度', name: '口渴度', icon: '💧', initialValue: 60, maxValue: 100, minValue: 0, naturalDecayPerTurn: -5, isNegativeWhenHigh: false },
-  { id: '体力值', name: '体力值', icon: '⚡', initialValue: 80, maxValue: 100, minValue: 0, naturalDecayPerTurn: 0, isNegativeWhenHigh: false },
-  { id: '健康值', name: '健康值', icon: '❤️', initialValue: 100, maxValue: 100, minValue: 0, naturalDecayPerTurn: 0, isNegativeWhenHigh: false },
-  { id: '精力值', name: '精力值', icon: '🧠', initialValue: 80, maxValue: 100, minValue: 0, naturalDecayPerTurn: -2, isNegativeWhenHigh: false },
-  { id: '污垢', name: '污垢', icon: '🦠', initialValue: 20, maxValue: 100, minValue: 0, naturalDecayPerTurn: 3, isNegativeWhenHigh: true },
-  { id: '心情', name: '心情', icon: '😊', initialValue: 70, maxValue: 100, minValue: 0, naturalDecayPerTurn: -2, isNegativeWhenHigh: false },
+  { id: '饱食度', name: '饱食度', icon: '🍖', initialValue: 60, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
+  { id: '口渴度', name: '口渴度', icon: '💧', initialValue: 60, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
+  { id: '体力值', name: '体力值', icon: '⚡', initialValue: 80, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
+  { id: '健康值', name: '健康值', icon: '❤️', initialValue: 100, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
+  { id: '精力值', name: '精力值', icon: '🧠', initialValue: 80, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
+  { id: '污垢', name: '污垢', icon: '🦠', initialValue: 20, maxValue: 100, minValue: 0, isNegativeWhenHigh: true },
+  { id: '心情', name: '心情', icon: '😊', initialValue: 70, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
+  { id: '负重', name: '负重', icon: '🎒', initialValue: 0, maxValue: 100, minValue: 0, isNegativeWhenHigh: true },
+  { id: '体温', name: '体温', icon: '🧊', initialValue: 60, maxValue: 100, minValue: 0, isNegativeWhenHigh: false },
 ] as const;
 
 // ============================================================
@@ -80,6 +84,18 @@ export const ATTRIBUTE_THRESHOLDS: Record<string, AttributeThreshold[]> = {
     { minValue: 51, maxValue: 80, effectId: '心情_正常', effectDescription: '正常', efficiencyModifier: 1, recoveryModifier: 0 },
     { minValue: 81, maxValue: 100, effectId: '心情_愉悦', effectDescription: '所有消耗 -20%，突发危险概率 -5%，稀有发现概率 +5%', efficiencyModifier: 0.8, recoveryModifier: 0 },
   ],
+  '负重': [
+    { minValue: 0, maxValue: 50, effectId: '负重_轻装', effectDescription: '移动体力消耗 -20%，闪避率 +5%', efficiencyModifier: 1.2, recoveryModifier: 0 },
+    { minValue: 51, maxValue: 80, effectId: '负重_负重', effectDescription: '移动体力消耗 +30%，闪避率 -10%，采集额外体力 -3', efficiencyModifier: 0.7, recoveryModifier: 0 },
+    { minValue: 81, maxValue: 100, effectId: '负重_超载', effectDescription: '移动体力消耗 +50%，闪避率 -15%，无法奔跑/撤退', efficiencyModifier: 0.5, recoveryModifier: 0 },
+  ],
+  '体温': [
+    { minValue: 0, maxValue: 20, effectId: '体温_失温', effectDescription: '每回合健康 -8，行动力 -50%，颤抖（采集产出 -50%）', efficiencyModifier: 0.5, recoveryModifier: -8 },
+    { minValue: 21, maxValue: 40, effectId: '体温_寒冷', effectDescription: '体力消耗 +30%，精力恢复 -50%', efficiencyModifier: 0.7, recoveryModifier: 0 },
+    { minValue: 41, maxValue: 60, effectId: '体温_适中', effectDescription: '正常', efficiencyModifier: 1, recoveryModifier: 0 },
+    { minValue: 61, maxValue: 80, effectId: '体温_温暖', effectDescription: '体力恢复 +2/回合，心情恢复 +1/回合', efficiencyModifier: 1, recoveryModifier: 2 },
+    { minValue: 81, maxValue: 100, effectId: '体温_炎热', effectDescription: '口渴消耗 +50%，体力消耗 +20%', efficiencyModifier: 0.8, recoveryModifier: 0 },
+  ],
 } as const;
 
 // ============================================================
@@ -113,50 +129,79 @@ export const ATTRIBUTE_LINKAGES: AttributeLinkage[] = [
 ] as const;
 
 // ============================================================
-// SECTION 4: ITEMS (16 types per 物资图鉴 v0.9)
+// SECTION 4: ITEMS (per 物资图鉴 v1.0 — 4大类 19种 + 食材 + 新增)
+// shelfLife in hours, undefined = never spoils
 // ============================================================
 
 export const ITEMS: ItemDef[] = [
-  // 生存物资
-  { id: '食物', name: '食物', icon: '🍖', category: '生存', weight: 2, stackLimit: 10, description: '充饥，恢复饱食度' },
-  { id: '水', name: '水', icon: '💧', category: '生存', weight: 3, stackLimit: 5, description: '解渴，恢复口渴度' },
-  { id: '草药', name: '草药', icon: '🌿', category: '生存', weight: 1, stackLimit: 10, description: '制作药膏、解毒剂、火把' },
-  { id: '解毒草', name: '解毒草', icon: '☘️', category: '生存', weight: 1, stackLimit: 5, description: '制作解毒剂，解除中毒' },
-  { id: '蛇胆', name: '蛇胆', icon: '🐍', category: '生存', weight: 1, stackLimit: 3, description: '解除高级蛇毒' },
-  // 建材物资
-  { id: '木材', name: '木材', icon: '🪵', category: '建材', weight: 5, stackLimit: 5, description: '工具/建筑/火把核心材料' },
+  // ── 生存物资 ──
+  { id: '食物', name: '食物', icon: '🍖', category: '生存', weight: 1, stackLimit: 20, description: '充饥，恢复饱食度' },
+  { id: '水', name: '水', icon: '💧', category: '生存', weight: 1, stackLimit: 20, description: '解渴，恢复口渴度' },
+  { id: '草药', name: '草药', icon: '🌿', category: '生存', weight: 1, stackLimit: 10, description: '制作药膏、火把、火药' },
+  { id: '解毒草', name: '解毒草', icon: '☘️', category: '生存', weight: 1, stackLimit: 5, description: '制作解毒剂' },
+  { id: '蛇胆', name: '蛇胆', icon: '🐍', category: '生存', weight: 1, stackLimit: 3, description: '解除高级蛇毒（直接使用）' },
+  // ── 食材（可腐烂）──
+  { id: '生肉', name: '生肉', icon: '🥩', category: '食材', weight: 1, stackLimit: 10, description: '狩猎获得，可烹饪为熟肉', shelfLife: 5 },
+  { id: '熟肉', name: '熟肉', icon: '🍖', category: '食材', weight: 1, stackLimit: 10, description: '烹饪生肉获得，安全食用', shelfLife: 15 },
+  { id: '蛋', name: '蛋', icon: '🥚', category: '食材', weight: 1, stackLimit: 10, description: '鸟蛋，可食用', shelfLife: 6 },
+  { id: '蟹贝', name: '蟹贝', icon: '🦀', category: '食材', weight: 1, stackLimit: 10, description: '海鲜，含食物和水分', shelfLife: 4 },
+  { id: '椰子', name: '椰子', icon: '🥥', category: '食材', weight: 1, stackLimit: 10, description: '可分解为食物或水', shelfLife: 20 },
+  // ── 建材物资 ──
+  { id: '木材', name: '木材', icon: '🪵', category: '建材', weight: 2, stackLimit: 10, description: '工具/建筑/火把核心材料' },
   { id: '石材', name: '石材', icon: '🪨', category: '建材', weight: 8, stackLimit: 3, description: '加固建筑、窑炉/熔炉' },
   { id: '纤维', name: '纤维', icon: '🧵', category: '建材', weight: 1, stackLimit: 10, description: '合成绳索、防具、建筑' },
   { id: '布料', name: '布料', icon: '🧶', category: '建材', weight: 2, stackLimit: 5, description: '制作布甲/皮甲/绷带（含兽皮）' },
   { id: '粘土', name: '粘土', icon: '🏺', category: '建材', weight: 5, stackLimit: 5, description: '烧制陶罐、建造窑炉/熔炉' },
-  // 矿石物资
+  // ── 矿石物资 ──
   { id: '铁矿', name: '铁矿', icon: '⛏️', category: '矿石', weight: 6, stackLimit: 5, description: '冶炼铁斧/铁镐（核心金属）' },
   { id: '硫磺', name: '硫磺', icon: '💨', category: '矿石', weight: 3, stackLimit: 5, description: '制作火把、火药' },
   { id: '黑曜石', name: '黑曜石', icon: '🗡️', category: '矿石', weight: 4, stackLimit: 3, description: '冶炼黑曜石刀（顶级武器）' },
-  // 特殊物资
+  // ── 特殊物资 ──
   { id: '绳索', name: '绳索', icon: '🪢', category: '特殊', weight: 3, stackLimit: 3, description: '攀爬/制作木矛/木筏（可合成）' },
   { id: '金属件', name: '金属件', icon: '🔩', category: '特殊', weight: 4, stackLimit: 5, description: '修理工具、建造工作台' },
   { id: '高级材料', name: '高级材料', icon: '💎', category: '特殊', weight: 2, stackLimit: 10, description: '交易/装饰/终极奖励' },
   { id: '工具', name: '工具', icon: '🔧', category: '特殊', weight: 5, stackLimit: 1, description: '随机成品工具（探索获得）' },
   { id: '藏宝图', name: '藏宝图', icon: '🗺️', category: '特殊', weight: 1, stackLimit: 1, description: '解锁隐藏点位（一次性）' },
-  { id: '渔网', name: '渔网', icon: '🥅', category: '特殊', weight: 3, stackLimit: 1, description: '制作捕鱼陷阱（可修理）' },
-  // 装备
-  { id: '石刀', name: '石刀', icon: '🔪', category: '装备', weight: 3, stackLimit: 1, description: '基础武器，攻击力+5' },
-  { id: '木矛', name: '木矛', icon: '📌', category: '装备', weight: 4, stackLimit: 1, description: '投射武器，攻击力+5可投掷' },
-  { id: '布甲', name: '布甲', icon: '👕', category: '装备', weight: 3, stackLimit: 1, description: '基础护甲，防御力+5' },
-  { id: '皮甲', name: '皮甲', icon: '🛡️', category: '装备', weight: 5, stackLimit: 1, description: '进阶护甲，防御力+10' },
-  // 工具
-  { id: '火把', name: '火把', icon: '🔥', category: '工具', weight: 2, stackLimit: 3, description: '照明5回合，洞穴探索必备' },
+  { id: '渔网', name: '渔网', icon: '🥅', category: '特殊', weight: 3, stackLimit: 1, description: '制作捕鱼陷阱（可修理）', repairable: true },
+  { id: '盐块', name: '盐块', icon: '🧂', category: '特殊', weight: 2, stackLimit: 5, description: '腌制食物延长保质期' },
+  { id: '兽皮', name: '兽皮', icon: '🐻', category: '特殊', weight: 2, stackLimit: 5, description: '丛林战斗掉落，可直接视为布料' },
+  // ── 装备 ──
+  { id: '石斧', name: '石斧', icon: '🪓', category: '装备', weight: 3, stackLimit: 1, description: '木材+2，攻击力+3', repairable: false },
+  { id: '木矛', name: '木矛', icon: '📌', category: '装备', weight: 4, stackLimit: 1, description: '攻击力+5，可投掷', repairable: true },
+  { id: '布甲', name: '布甲', icon: '👕', category: '装备', weight: 3, stackLimit: 1, description: '防御力+5', repairable: true },
+  { id: '皮甲', name: '皮甲', icon: '🛡️', category: '装备', weight: 5, stackLimit: 1, description: '防御力+10', repairable: true },
+  // ── 工具/消耗品 ──
+  { id: '火把', name: '火把', icon: '🔥', category: '工具', weight: 2, stackLimit: 3, description: '照明3小时，洞穴探索必备' },
   { id: '修理工具', name: '修理工具', icon: '🔧', category: '工具', weight: 2, stackLimit: 3, description: '修复任意工具+10耐久' },
-  { id: '木筏', name: '木筏', icon: '🛶', category: '工具', weight: 0, stackLimit: 1, description: '解锁浅海探索' },
+  { id: '木筏', name: '木筏', icon: '🛶', category: '工具', weight: 0, stackLimit: 1, description: '解锁浅海探索', repairable: true },
   { id: '捕鱼陷阱', name: '捕鱼陷阱', icon: '🎣', category: '工具', weight: 0, stackLimit: 1, description: '鱼产量+1，自动捕鱼' },
-  // 建筑
-  { id: '简易营地', name: '简易营地', icon: '🏕️', category: '建筑', weight: 0, stackLimit: 1, description: '休息恢复体力+40%，精力+20' },
+  { id: '绷带', name: '绷带', icon: '🩹', category: '工具', weight: 1, stackLimit: 5, description: '止血，防止感染恶化' },
+  { id: '火药', name: '火药', icon: '💣', category: '工具', weight: 2, stackLimit: 3, description: '爆破障碍/战斗伤害30' },
+  // ── 建筑 ──
+  { id: '简易营地', name: '简易营地', icon: '🏕️', category: '建筑', weight: 0, stackLimit: 1, description: '休息体力+40%，精力+20' },
   { id: '工作台', name: '工作台', icon: '🔨', category: '建筑', weight: 0, stackLimit: 1, description: '解锁高级制作配方' },
-  // 药剂
+  { id: '加固营地', name: '加固营地', icon: '🏠', category: '建筑', weight: 0, stackLimit: 1, description: '休息体力+60%，精力+30，储物15格' },
+  { id: '窑炉', name: '窑炉', icon: '🔥', category: '建筑', weight: 0, stackLimit: 1, description: '解锁烧制+熔炉权限' },
+  { id: '熔炉', name: '熔炉', icon: '⚒️', category: '建筑', weight: 0, stackLimit: 1, description: '解锁全部金属冶炼' },
+  // ── 药剂 ──
   { id: '药膏', name: '药膏', icon: '💊', category: '药剂', weight: 1, stackLimit: 5, description: '治疗感染，健康+10' },
   { id: '解毒剂', name: '解毒剂', icon: '🧪', category: '药剂', weight: 1, stackLimit: 5, description: '立即解除中毒' },
+  // ── 冶炼工具 ──
+  { id: '铁斧', name: '铁斧', icon: '⛏️', category: '装备', weight: 5, stackLimit: 1, description: '木材+4、矿石+1，攻击力+10', repairable: true },
+  { id: '铁镐', name: '铁镐', icon: '⛏️', category: '装备', weight: 5, stackLimit: 1, description: '矿石+2、石材+2，攻击力+3', repairable: true },
+  { id: '黑曜石刀', name: '黑曜石刀', icon: '🗡️', category: '装备', weight: 4, stackLimit: 1, description: '全采集+3，攻击力+15' },
+  // ── 其他 ──
+  { id: '陶罐', name: '陶罐', icon: '🏺', category: '工具', weight: 3, stackLimit: 1, description: '储水容量+5，口渴衰减-20%' },
+  { id: '扩容背包', name: '扩容背包', icon: '🎒', category: '工具', weight: 0, stackLimit: 1, description: '格子+8（12→20）' },
 ] as const;
+
+export const SPOILAGE_PENALTIES: Record<string, SpoilagePenalty> = {
+  '生肉': { type: '中毒', poisonChance: 0.5 },
+  '熟肉': { type: '效果衰减', effectReduction: 0.3 },
+  '蛋': { type: '中毒', poisonChance: 0.5 },
+  '蟹贝': { type: '中毒', poisonChance: 0.5 },
+  '椰子': { type: '无' },
+} as const;
 
 // ============================================================
 // SECTION 5: CRAFTING RECIPES (Tier 0 and Tier 1 only)
@@ -165,7 +210,7 @@ export const ITEMS: ItemDef[] = [
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // Tier 0 - 空手可做
   { productId: '绳索', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 3 }], station: 'none', craftingTime: 1, effect: '基础攀爬材料' },
-  { productId: '石刀', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '石材', quantity: 1 }], station: 'none', craftingTime: 2, durability: 15, effect: '攻击力+5' },
+  { productId: '石斧', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '石材', quantity: 1 }], station: 'none', craftingTime: 2, durability: 10, effect: '木材+2，攻击力+3' },
   { productId: '木矛', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', craftingTime: 2, durability: 8, effect: '攻击力+5，可投掷' },
   { productId: '火把', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 1 }, { itemId: '纤维', quantity: 2 }], station: 'none', craftingTime: 1, durability: 5, effect: '照明5回合' },
   { productId: '布甲', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', craftingTime: 1, durability: 10, effect: '防御力+5' },
@@ -179,6 +224,28 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   { productId: '木筏', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '绳索', quantity: 2 }], station: 'workbench', craftingTime: 3, effect: '解锁浅海探索' },
   { productId: '捕鱼陷阱', productQuantity: 1, ingredients: [{ itemId: '渔网', quantity: 1 }, { itemId: '木材', quantity: 1 }], station: 'workbench', craftingTime: 2, durability: 10, effect: '鱼产量+1，自动捕鱼' },
 ] as const;
+
+// ============================================================
+// SECTION 5B: RECIPES (P1.6 blueprint-based crafting)
+// ============================================================
+
+export const RECIPES: Recipe[] = [
+  // Tier 0 - always available (blueprintRequired: null)
+  { id: '绳索', productId: '绳索', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 3 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '材料' },
+  { id: '石斧', productId: '石斧', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '石材', quantity: 1 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '工具' },
+  { id: '木矛', productId: '木矛', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '装备' },
+  { id: '火把', productId: '火把', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 1 }, { itemId: '纤维', quantity: 2 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '工具' },
+  { id: '布甲', productId: '布甲', productQuantity: 1, ingredients: [{ itemId: '纤维', quantity: 2 }, { itemId: '绳索', quantity: 1 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '装备' },
+  { id: '简易营地', productId: '简易营地', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 4 }, { itemId: '纤维', quantity: 2 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '建筑' },
+  { id: '药膏', productId: '药膏', productQuantity: 1, ingredients: [{ itemId: '草药', quantity: 2 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '药剂' },
+  { id: '解毒剂', productId: '解毒剂', productQuantity: 1, ingredients: [{ itemId: '解毒草', quantity: 1 }], station: 'none', baseTime: 20, blueprintRequired: null, category: '药剂' },
+  // Tier 1 - workbench, some require blueprints
+  { id: '皮甲', productId: '皮甲', productQuantity: 1, ingredients: [{ itemId: '布料', quantity: 2 }, { itemId: '纤维', quantity: 2 }], station: 'workbench', baseTime: 20, blueprintRequired: '皮甲蓝图', category: '装备' },
+  { id: '修理工具', productId: '修理工具', productQuantity: 1, ingredients: [{ itemId: '铁矿', quantity: 2 }, { itemId: '纤维', quantity: 1 }], station: 'workbench', baseTime: 20, blueprintRequired: null, category: '工具' },
+  { id: '工作台', productId: '工作台', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '金属件', quantity: 1 }], station: 'workbench', baseTime: 20, blueprintRequired: '工作台蓝图', category: '建筑' },
+  { id: '木筏', productId: '木筏', productQuantity: 1, ingredients: [{ itemId: '木材', quantity: 3 }, { itemId: '绳索', quantity: 2 }], station: 'workbench', baseTime: 20, blueprintRequired: '木筏蓝图', category: '工具' },
+  { id: '捕鱼陷阱', productId: '捕鱼陷阱', productQuantity: 1, ingredients: [{ itemId: '渔网', quantity: 1 }, { itemId: '木材', quantity: 1 }], station: 'workbench', baseTime: 20, blueprintRequired: '捕鱼陷阱蓝图', category: '工具' },
+];
 
 // ============================================================
 // SECTION 6: WEATHER TYPES (4 types, V1 only)
@@ -209,16 +276,18 @@ export const STATUS_EFFECTS: StatusEffectDef[] = [
 ] as const;
 
 // ============================================================
-// SECTION 8: COMBAT STRATEGIES (6 total, V1)
+// SECTION 8: COMBAT STRATEGIES (8 total, V1)
 // ============================================================
 
 export const COMBAT_STRATEGIES: CombatStrategyDef[] = [
   { id: '普通攻击', name: '普通攻击', icon: '⚔️', staminaCost: 10, energyCost: 0, damageMultiplier: 1, hitRateModifier: 0, dodgeRateBonus: 0, blockDamageReduction: 0, soundLevel: 'medium', description: '标准伤害，标准命中率', requirements: [] },
-  { id: '猛击', name: '猛击', icon: '💥', staminaCost: 20, energyCost: 0, damageMultiplier: 2, hitRateModifier: -0.2, dodgeRateBonus: 0, blockDamageReduction: 0, soundLevel: 'loud', description: '伤害×2，命中率-20%', requirements: ['体力>40'] },
+  { id: '猛击', name: '猛击', icon: '💥', staminaCost: 20, energyCost: 0, damageMultiplier: 1.5, hitRateModifier: -0.15, dodgeRateBonus: 0, blockDamageReduction: 0, soundLevel: 'loud', description: '伤害×1.5，命中率-15%', requirements: ['体力>40'] },
   { id: '闪避姿态', name: '闪避姿态', icon: '💨', staminaCost: 15, energyCost: 0, damageMultiplier: 0, hitRateModifier: 0, dodgeRateBonus: 0.25, blockDamageReduction: 0, soundLevel: 'silent', description: '本回合闪避率+25%，不攻击', requirements: [] },
   { id: '格挡', name: '格挡', icon: '🛡️', staminaCost: 8, energyCost: 0, damageMultiplier: 0, hitRateModifier: 0, dodgeRateBonus: 0, blockDamageReduction: 0.5, soundLevel: 'silent', description: '本回合减伤50%，不攻击', requirements: [] },
   { id: '精准攻击', name: '精准攻击', icon: '🎯', staminaCost: 12, energyCost: 10, damageMultiplier: 1.3, hitRateModifier: 0.2, dodgeRateBonus: 0, blockDamageReduction: 0, soundLevel: 'medium', description: '命中率+20%，伤害+30%', requirements: ['精力>30'] },
+  { id: '恐吓', name: '恐吓', icon: '👹', staminaCost: 5, energyCost: 0, damageMultiplier: 0, hitRateModifier: 0, dodgeRateBonus: 0, blockDamageReduction: 0, soundLevel: 'medium', description: '50%吓退野兽（无战利品）', requirements: [], isIntimidate: true },
   { id: '撤退', name: '撤退', icon: '🏃', staminaCost: 20, energyCost: 0, damageMultiplier: 0, hitRateModifier: 0, dodgeRateBonus: 0, blockDamageReduction: 0, soundLevel: 'medium', description: '退出战斗，损失随机物资×1', requirements: [] },
+  { id: '潜行击', name: '潜行击', icon: '🗡️', staminaCost: 8, energyCost: 0, damageMultiplier: 1.5, hitRateModifier: -0.15, dodgeRateBonus: 0.2, blockDamageReduction: 0, soundLevel: 'medium', description: '命中60%，伤害×1.5，必定先手，闪避+20%', requirements: [], stealthFirstStrike: true },
 ] as const;
 
 // ============================================================
@@ -294,6 +363,7 @@ export const V1_SPEC = {
   ATTRIBUTE_LINKAGES,
   ITEMS,
   CRAFTING_RECIPES,
+  RECIPES,
   WEATHER_TYPES,
   STATUS_EFFECTS,
   COMBAT_STRATEGIES,

@@ -1,44 +1,34 @@
 // ============================================================
-// CardLand GameScreen — Main game layout
+// GameScreen — Main game layout (V2: unified Zustand store)
 // Left sidebar (narrow, sticky) + Right main area (scrollable)
-// Wires all card components to Zustand stores.
 // ============================================================
 
 import { useState, useMemo, useCallback } from 'react';
-import { useGameStore } from '@stores/gameStore';
-import { usePlayerStore } from '@stores/playerStore';
-import { useMapStore } from '@stores/mapStore';
+import { useGameStore, type EquipmentSlots } from '@stores/gameStore';
 import { useWeightCalc } from '@stores/selectors';
 
-// -- Card components (left sidebar) --
 import { GameTitleCard } from './cards/GameTitleCard';
 import { GuideCraftingCard } from './cards/GuideCraftingCard';
 import { CharacterCard } from './cards/CharacterCard';
-import { StatusIconPanel } from './cards/StatusIconPanel';
 import { EquipmentCard, type Equipment } from './cards/EquipmentCard';
-
-// -- Card components (right main area) --
+import { StatusIconPanel } from './cards/StatusIconPanel';
 import { LocationCard } from './cards/LocationCard';
 import { RecipeResourceCard } from './cards/RecipeResourceCard';
 import { InventoryCard } from './cards/InventoryCard';
 
-// -- Overlay screens --
 import { CombatScreen } from './CombatScreen';
 import { EventScreen } from './EventScreen';
 import { SavePanel } from './SavePanel';
 
-// -- Data --
-import { ATTRIBUTES, WEATHER_TYPES, CRAFTING_RECIPES, STATUS_EFFECTS, ITEMS } from '@data/v1-spec';
+import { ATTRIBUTES, RECIPES, ITEMS } from '@data/v1-spec';
+import { STATUS_DEFINITIONS, ALL_STATUS_IDS } from '@engine/status';
 import { getMapPointById, getMapPointsBySubZone } from '@data/map';
+import { getTimeOfDay } from '@engine/clock';
+import { getItemDef } from '@engine/inventory';
+import type { StatusEffectId } from '@engine/status';
 
-// -- Styles --
 import styles from './GameScreen.module.css';
 
-// ============================================================
-// Helpers
-// ============================================================
-
-/** Map point type → display icon */
 const POINT_TYPE_ICONS: Record<string, string> = {
   '资源点': '🌿',
   '休息点': '🏕️',
@@ -47,46 +37,39 @@ const POINT_TYPE_ICONS: Record<string, string> = {
   '障碍点': '🧱',
 };
 
-function getWeatherInfo(weatherId: string) {
-  const def = WEATHER_TYPES.find((w) => w.id === weatherId);
-  return { icon: def?.icon ?? '☀️', name: def?.name ?? '未知' };
+function lookupItemDef(itemId: string) {
+  return getItemDef(itemId as import('@data/types').ItemId) ?? ITEMS.find((i) => i.id === itemId);
 }
 
-function getItemDef(itemId: string) {
-  return ITEMS.find((i) => i.id === itemId);
+function getShelfLifeHours(itemId: string): number | undefined {
+  const def = ITEMS.find((i) => i.id === itemId);
+  return def?.shelfLife;
 }
-
-// ============================================================
-// GameScreen Component
-// ============================================================
 
 export function GameScreen() {
-  // ── Store selectors ──
-  const gameState = useGameStore((s) => s.gameState);
+  const clock = useGameStore((s) => s.clock);
+  const weather = useGameStore((s) => s.weather);
   const gamePhase = useGameStore((s) => s.gamePhase);
+  const attributes = useGameStore((s) => s.attributes);
+  const inventory = useGameStore((s) => s.inventory);
+  const statusEffects = useGameStore((s) => s.statusEffects);
+  const equipment = useGameStore((s) => s.equipment);
+  const currentPosition = useGameStore((s) => s.currentPosition);
+  const currentSubZone = useGameStore((s) => s.currentSubZone);
+  const gameOver = useGameStore((s) => s.gameOver);
+
   const resetGame = useGameStore((s) => s.resetGame);
   const setGamePhase = useGameStore((s) => s.setGamePhase);
-  const processAction = useGameStore((s) => s.processAction);
-
-  const attributes = usePlayerStore((s) => s.attributes);
-  const inventory = usePlayerStore((s) => s.inventory);
-  const statusEffects = usePlayerStore((s) => s.statusEffects);
-  const useItem = usePlayerStore((s) => s.useItem);
-  const equipment = usePlayerStore((s) => s.equipment);
-
-  const currentSubZone = useMapStore((s) => s.currentSubZone);
+  const moveTo = useGameStore((s) => s.moveTo);
+  const explore = useGameStore((s) => s.explore);
+  const rest = useGameStore((s) => s.rest);
+  const useItem = useGameStore((s) => s.useItem);
 
   const { weight } = useWeightCalc();
 
-  // ── Local state ──
   const [showSavePanel, setShowSavePanel] = useState(false);
 
-  // ── Derived data: left sidebar ──
-
-  const weatherInfo = useMemo(
-    () => getWeatherInfo(gameState.weather.current),
-    [gameState.weather.current],
-  );
+  const timeOfDay = useMemo(() => getTimeOfDay(clock), [clock.hour]);
 
   const attributePanelData = useMemo(
     () =>
@@ -102,13 +85,13 @@ export function GameScreen() {
 
   const craftingPanelData = useMemo(
     () =>
-      CRAFTING_RECIPES.map((r) => {
-        const productDef = getItemDef(r.productId);
+      RECIPES.map((r) => {
+        const productDef = lookupItemDef(r.productId);
         return {
           productIcon: productDef?.icon ?? '📦',
           productName: productDef?.name ?? r.productId,
           ingredients: r.ingredients.map((ing) => {
-            const ingDef = getItemDef(ing.itemId);
+            const ingDef = lookupItemDef(ing.itemId);
             return {
               icon: ingDef?.icon ?? '·',
               name: ingDef?.name ?? ing.itemId,
@@ -116,29 +99,41 @@ export function GameScreen() {
             };
           }),
           station: r.station,
-          craftingTime: r.craftingTime,
+          craftingTime: r.baseTime,
         };
       }),
     [],
   );
 
-  const maxWeight = 100;
+  const statusIconPanelData = useMemo(() => {
+    const currentTime = clock.totalMinutes;
+    const activeIds = new Set(
+      statusEffects
+        .filter((se) => se.expiresAt === null || currentTime < se.expiresAt)
+        .map((se) => se.id),
+    );
 
-  const statusIconPanelData = useMemo(
-    () =>
-      STATUS_EFFECTS.map((def) => {
-        const activeEffect = statusEffects.find((se) => se.id === def.id);
-        return {
-          icon: def.icon,
-          name: def.name,
-          isActive: !!activeEffect,
-          isNegative: def.isNegative,
-          details: def.effectDescription,
-          remainingTurns: activeEffect?.remainingDuration ?? 0,
-        };
-      }),
-    [statusEffects],
-  );
+    return ALL_STATUS_IDS.map((id) => {
+      const def = STATUS_DEFINITIONS[id];
+      const activeEffect = statusEffects.find(
+        (se) => se.id === id && (se.expiresAt === null || currentTime < se.expiresAt),
+      );
+      const remainingMinutes = activeEffect
+        ? activeEffect.expiresAt != null
+          ? Math.max(0, activeEffect.expiresAt - currentTime)
+          : 0
+        : 0;
+
+      return {
+        icon: def.icon,
+        name: def.name,
+        isActive: activeIds.has(id),
+        isNegative: def.isNegative,
+        details: `${def.name} — ${def.removalMethods.join(', ')}`,
+        remainingMinutes,
+      };
+    });
+  }, [statusEffects, clock.totalMinutes]);
 
   const survivalStatusData = useMemo(() => {
     const hp = attributes['健康值'] ?? 0;
@@ -173,25 +168,30 @@ export function GameScreen() {
       statusDescription = '身体状态一般，注意补给。';
     }
 
-    const activeEffects = statusEffects.map((se) => {
-      const def = STATUS_EFFECTS.find((d) => d.id === se.id);
-      return `${def?.icon ?? ''} ${def?.name ?? se.id}`;
-    });
+    const activeEffects = statusEffects
+      .filter((se) => se.expiresAt === null || clock.totalMinutes < se.expiresAt)
+      .map((se) => {
+        const def = STATUS_DEFINITIONS[se.id as StatusEffectId];
+        return `${def?.icon ?? ''} ${def?.name ?? se.id}`;
+      });
 
     return { overallStatus, statusDescription, activeEffects };
-  }, [attributes, statusEffects]);
+  }, [attributes, statusEffects, clock.totalMinutes]);
 
-  const EQUIPMENT_SLOTS = [
-    { slot: 'weapon', icon: '⚔️', name: '武器' },
-    { slot: 'armor', icon: '🛡️', name: '护甲' },
-    { slot: 'accessory', icon: '💍', name: '饰品' },
-    { slot: 'backpack', icon: '🎒', name: '背包' },
-  ] as const;
+  const EQUIPMENT_SLOTS: { slot: keyof EquipmentSlots; icon: string; name: string }[] = [
+    { slot: 'head', icon: '👑', name: '头部' },
+    { slot: 'body', icon: '🛡️', name: '护甲' },
+    { slot: 'hands', icon: '⚔️', name: '武器' },
+    { slot: 'legs', icon: '👖', name: '腿部' },
+    { slot: 'feet', icon: '👢', name: '鞋子' },
+    { slot: 'accessory1', icon: '💍', name: '饰品1' },
+    { slot: 'accessory2', icon: '💍', name: '饰品2' },
+  ];
 
   const equipmentData: Equipment[] = useMemo(() => {
     return EQUIPMENT_SLOTS.map((def) => {
       const equippedId = equipment[def.slot];
-      const itemDef = equippedId ? getItemDef(equippedId) : undefined;
+      const itemDef = equippedId ? lookupItemDef(equippedId) : undefined;
       return {
         slot: def.slot,
         icon: def.icon,
@@ -201,10 +201,8 @@ export function GameScreen() {
     });
   }, [equipment]);
 
-  // ── Derived data: right main area ──
-
   const locationData = useMemo(() => {
-    const currentPoint = getMapPointById(gameState.currentPosition);
+    const currentPoint = getMapPointById(currentPosition);
     const subZonePoints = getMapPointsBySubZone(currentSubZone);
 
     const directions: { north?: string; south?: string; east?: string; west?: string } = {};
@@ -216,32 +214,31 @@ export function GameScreen() {
     }
 
     return {
-      currentLocation: currentPoint?.name ?? gameState.currentPosition,
+      currentLocation: currentPoint?.name ?? currentPosition,
       locationIcon: POINT_TYPE_ICONS[currentPoint?.type ?? ''] ?? '📍',
       directions,
     };
-  }, [gameState.currentPosition, currentSubZone]);
+  }, [currentPosition, currentSubZone]);
 
   const recipeResourceData = useMemo(() => {
-    const recipes = CRAFTING_RECIPES.map((r) => {
-      const productDef = getItemDef(r.productId);
+    const recipes = RECIPES.map((r) => {
+      const productDef = lookupItemDef(r.productId);
       return {
         productIcon: productDef?.icon ?? '📦',
         productName: productDef?.name ?? r.productId,
         ingredients: r.ingredients.map((ing) => {
-          const ingDef = getItemDef(ing.itemId);
+          const ingDef = lookupItemDef(ing.itemId);
           return {
             icon: ingDef?.icon ?? '·',
             name: ingDef?.name ?? ing.itemId,
             quantity: ing.quantity,
           };
         }),
-        effect: r.effect,
       };
     });
 
-    const resources = inventory.map((slot) => {
-      const def = getItemDef(slot.itemId);
+    const resources = inventory.slots.map((slot) => {
+      const def = lookupItemDef(slot.itemId);
       return {
         icon: def?.icon ?? '📦',
         name: def?.name ?? slot.itemId,
@@ -254,76 +251,68 @@ export function GameScreen() {
 
   const inventoryData = useMemo(
     () =>
-      inventory.map((slot) => {
-        const def = getItemDef(slot.itemId);
+      inventory.slots.map((slot) => {
+        const def = lookupItemDef(slot.itemId);
+        const shelfLife = getShelfLifeHours(slot.itemId);
         return {
           icon: def?.icon ?? '📦',
           name: def?.name ?? slot.itemId,
           quantity: slot.quantity,
           weight: def?.weight ?? 0,
           category: def?.category ?? '特殊',
+          shelfLifeHours: shelfLife,
         };
       }),
     [inventory],
   );
 
-  // ── Derived data: overlays ──
-
-  /** Find a choice event from the current map point for the event overlay */
   const currentEvent = useMemo(() => {
     if (gamePhase !== 'event') return null;
-    const currentPoint = getMapPointById(gameState.currentPosition);
+    const currentPoint = getMapPointById(currentPosition);
     if (currentPoint?.choiceEvents?.length) {
       return currentPoint.choiceEvents[0];
     }
     return null;
-  }, [gamePhase, gameState.currentPosition]);
-
-  // ── Handlers ──
+  }, [gamePhase, currentPosition]);
 
   const handleSaveOpen = useCallback(() => setShowSavePanel(true), []);
   const handleSaveClose = useCallback(() => setShowSavePanel(false), []);
-
   const handleEventComplete = useCallback(() => {
     setGamePhase('exploration');
   }, [setGamePhase]);
 
   const foodCount = useMemo(
-    () => inventory.find((s) => s.itemId === '食物')?.quantity ?? 0,
+    () => inventory.slots.filter((s) => s.itemId === '食物').reduce((sum, s) => sum + s.quantity, 0),
     [inventory],
   );
-
   const waterCount = useMemo(
-    () => inventory.find((s) => s.itemId === '水')?.quantity ?? 0,
+    () => inventory.slots.filter((s) => s.itemId === '水').reduce((sum, s) => sum + s.quantity, 0),
     [inventory],
   );
-
   const herbCount = useMemo(
-    () => inventory.find((s) => s.itemId === '草药')?.quantity ?? 0,
+    () => inventory.slots.filter((s) => s.itemId === '草药').reduce((sum, s) => sum + s.quantity, 0),
     [inventory],
   );
 
   const handleEat = useCallback(() => {
     if (foodCount > 0) useItem('食物');
   }, [foodCount, useItem]);
-
   const handleDrink = useCallback(() => {
     if (waterCount > 0) useItem('水');
   }, [waterCount, useItem]);
-
   const handleHeal = useCallback(() => {
     if (herbCount > 0) useItem('草药');
   }, [herbCount, useItem]);
 
   const handleExplore = useCallback(() => {
     if (gamePhase !== 'exploration') return;
-    processAction({ type: 'gather' });
-  }, [gamePhase, processAction]);
+    explore();
+  }, [gamePhase, explore]);
 
   const handleRest = useCallback(() => {
     if (gamePhase !== 'exploration') return;
-    processAction({ type: 'rest' });
-  }, [gamePhase, processAction]);
+    rest('短休');
+  }, [gamePhase, rest]);
 
   const handleDirectionClick = useCallback(
     (direction: string) => {
@@ -331,36 +320,35 @@ export function GameScreen() {
       const subZonePoints = getMapPointsBySubZone(currentSubZone);
       const targetPoint = subZonePoints.find((p) => p.direction === direction);
       if (targetPoint) {
-        processAction({ type: 'gather' });
+        moveTo(targetPoint.id);
       }
     },
-    [gamePhase, currentSubZone, processAction],
+    [gamePhase, currentSubZone, moveTo],
   );
 
-  const handleMapClick = useCallback(() => {
-    // Map overlay integration point — not in scope for layout.
-  }, []);
-
-  // ── Render ──
+  const handleMapClick = useCallback(() => {}, []);
 
   return (
     <div className={styles.screen}>
-      {/* ─── Left Sidebar ─── */}
       <aside className={styles.sidebar}>
         <GameTitleCard
-          weatherIcon={weatherInfo.icon}
-          weatherName={weatherInfo.name}
-          turn={gameState.turnNumber}
-          weatherTurnsRemaining={gameState.weather.turnsRemaining}
+          clock={clock}
+          weatherId={weather.current}
+          daysRemaining={weather.daysRemaining}
+          timeOfDay={timeOfDay}
         />
-        <GuideCraftingCard attributes={attributePanelData} recipes={craftingPanelData} survivalStatus={survivalStatusData.overallStatus} />
+        <GuideCraftingCard
+          attributes={attributePanelData}
+          recipes={craftingPanelData}
+          survivalStatus={survivalStatusData.overallStatus}
+        />
         <CharacterCard
           name="幸存者"
           avatarEmoji="🧑"
           hp={attributes['健康值'] ?? 0}
           maxHp={100}
           weight={weight}
-          maxWeight={maxWeight}
+          maxWeight={inventory.maxWeight}
           foodCount={foodCount}
           waterCount={waterCount}
           herbCount={herbCount}
@@ -375,7 +363,6 @@ export function GameScreen() {
         </button>
       </aside>
 
-      {/* ─── Right Main Area ─── */}
       <main className={styles.main}>
         <section className={styles.section}>
           <LocationCard
@@ -401,9 +388,6 @@ export function GameScreen() {
         </section>
       </main>
 
-      {/* ─── Overlays ─── */}
-
-      {/* Combat overlay */}
       {gamePhase === 'combat' && (
         <div className={styles.overlayBackdrop}>
           <div className={styles.overlayContent}>
@@ -412,7 +396,6 @@ export function GameScreen() {
         </div>
       )}
 
-      {/* Event overlay */}
       {gamePhase === 'event' && currentEvent && (
         <div className={styles.overlayBackdrop}>
           <div className={styles.overlayContent}>
@@ -421,15 +404,13 @@ export function GameScreen() {
         </div>
       )}
 
-      {/* Save panel overlay */}
       {showSavePanel && <SavePanel onClose={handleSaveClose} />}
 
-      {/* Game over overlay */}
       {gamePhase === 'gameover' && (
         <div className={styles.gameOverOverlay}>
           <div className={styles.gameOverTitle}>💀 游戏结束</div>
           <div className={styles.gameOverReason}>
-            {gameState.gameOver.reason ?? '你未能在荒岛中存活下来。'}
+            {gameOver.reason ?? '你未能在荒岛中存活下来。'}
           </div>
           <button className={styles.gameOverRestart} onClick={resetGame}>
             🔄 重新开始

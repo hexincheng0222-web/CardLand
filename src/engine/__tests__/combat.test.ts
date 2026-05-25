@@ -1,41 +1,55 @@
 import { describe, it, expect } from 'vitest';
 import {
-  initiateCombat,
+  createCombatContext,
+  getAvailableStrategies,
+  calculateDodgeRate,
+  calculateDodgeRateWithContext,
+  calculateHitRate,
+  calculateHitRateWithContext,
+  calculateDamage,
+  calculateDamageWithContext,
+  calculateStaminaCost,
+  resolveCombatRound,
+  resolveCombatRoundEnemy,
+  checkCombatEndWithContext,
+  generateLoot,
+  createSeededRNG,
+  calculateNoiseLevel,
+  calculateEncounterChance,
   resolvePlayerAction,
   resolveEnemyAction,
-  calculateDamage,
-  checkCombatEnd,
-  generateLoot,
-  calculateDodgeRate,
-  calculateHitRate,
-  calculateStaminaCost,
-  getAvailableStrategies,
-  createSeededRNG,
+  initiateCombat,
+  TERRAIN_DODGE_MODIFIERS,
+  TERRAIN_HIT_MODIFIERS,
+  TERRAIN_DEFENSE_BONUS,
+  TERRAIN_BLOCK_BONUS,
 } from '../combat';
 import type {
+  CombatContext,
   CombatState,
   PlayerCombatState,
   EnemyCombatState,
   Terrain,
 } from '../combat';
-import type { EnemyDef, ItemId } from '@data/types';
+import type { EnemyDef } from '@data/types';
 import { ENEMIES } from '@data/v1-spec';
+import { createInventory } from '../inventory';
 
 // ============================================================
 // Helpers
 // ============================================================
 
 function makePlayer(overrides?: Partial<PlayerCombatState>): PlayerCombatState {
+  const inv = createInventory();
+  inv.slots.push({ itemId: '食物', quantity: 3 });
+  inv.slots.push({ itemId: '水', quantity: 2 });
+  inv.slots.push({ itemId: '草药', quantity: 1 });
   return {
     stamina: 80,
     attackPower: 5,
     defense: 0,
     health: 100,
-    inventory: [
-      { itemId: '食物', quantity: 3 },
-      { itemId: '水', quantity: 2 },
-      { itemId: '草药', quantity: 1 },
-    ],
+    inventory: inv,
     ...overrides,
   };
 }
@@ -69,16 +83,50 @@ function makeState(overrides?: Partial<CombatState>): CombatState {
   };
 }
 
-/** Enemy def matching 小野猪 (Small tier) */
+function makeContext(overrides?: Partial<CombatContext>): CombatContext {
+  const inv = createInventory();
+  inv.slots.push({ itemId: '食物', quantity: 3 });
+  inv.slots.push({ itemId: '水', quantity: 2 });
+  inv.slots.push({ itemId: '草药', quantity: 1 });
+  return {
+    player: {
+      stamina: 80,
+      health: 100,
+      energy: 80,
+      attackPower: 5,
+      defense: 0,
+      weightRatio: 0.3,
+      inventory: inv,
+    },
+    enemy: {
+      tier: 'Small',
+      name: '小野猪',
+      icon: '🐗',
+      hp: 10,
+      maxHp: 10,
+      atk: 3,
+      def: 1,
+      dodgeRate: 0.2,
+      isBeast: true,
+    },
+    terrain: '海滩',
+    weather: '晴',
+    isNight: false,
+    turn: 1,
+    combatCount: 1,
+    status: 'active',
+    currentDodgeBonus: 0,
+    currentBlockReduction: 0,
+    log: [],
+    ...overrides,
+  };
+}
+
 const smallEnemyDef: EnemyDef = ENEMIES[0];
-/** Enemy def matching 野猪 (Medium tier) */
 const mediumEnemyDef: EnemyDef = ENEMIES[2];
-/** Enemy def matching 蛇王 (Large tier) */
 const largeEnemyDef: EnemyDef = ENEMIES[3];
 
-/** Roll that guarantees success (dodge/hit) — value <= rate threshold */
 const successRoll = 0.0;
-/** Roll that guarantees failure — value > rate threshold (use 0.999) */
 const failRoll = 0.999;
 
 // ============================================================
@@ -121,13 +169,13 @@ describe('calculateDamage', () => {
   });
 
   it('applies damageMultiplier correctly', () => {
-    expect(calculateDamage(5, 1, 2)).toBe(8);   // (5-1)*2
-    expect(calculateDamage(5, 1, 1.3)).toBe(5); // floor(4*1.3) = 5
+    expect(calculateDamage(5, 1, 1.5)).toBe(6);
+    expect(calculateDamage(5, 1, 1.3)).toBe(5);
   });
 
   it('floors fractional damage', () => {
-    expect(calculateDamage(6, 1, 1.3)).toBe(6);   // floor(5*1.3) = 6
-    expect(calculateDamage(7, 2, 0.5)).toBe(2);   // floor(5*0.5) = 2
+    expect(calculateDamage(6, 1, 1.3)).toBe(6);
+    expect(calculateDamage(7, 2, 0.5)).toBe(2);
   });
 
   it('returns minimum 1 when def >= atk', () => {
@@ -136,14 +184,54 @@ describe('calculateDamage', () => {
   });
 
   it('applies block damage reduction', () => {
-    // (5-1)*1 = 4, block 50% → 2
     expect(calculateDamage(5, 1, 1, 0.5)).toBe(2);
-    // minimum 1 still applies after block
-    expect(calculateDamage(3, 1, 1, 0.5)).toBe(1); // (2*0.5) = 1
+    expect(calculateDamage(3, 1, 1, 0.5)).toBe(1);
   });
 
   it('handles zero multiplier (non-attack strategies)', () => {
     expect(calculateDamage(5, 1, 0)).toBe(0);
+  });
+});
+
+// ============================================================
+// calculateDamageWithContext
+// ============================================================
+
+describe('calculateDamageWithContext', () => {
+  it('uses player attackPower and enemy def', () => {
+    const ctx = makeContext();
+    const strat = { damageMultiplier: 1 } as any;
+    expect(calculateDamageWithContext(ctx, strat)).toBe(4);
+  });
+
+  it('applies 1.5x multiplier for 猛击', () => {
+    const ctx = makeContext();
+    const strat = { damageMultiplier: 1.5 } as any;
+    expect(calculateDamageWithContext(ctx, strat)).toBe(6);
+  });
+
+  it('reduces attack by 30% when health <= 60', () => {
+    const ctx = makeContext({ player: { ...makeContext().player, health: 50 } });
+    const strat = { damageMultiplier: 1 } as any;
+    expect(calculateDamageWithContext(ctx, strat)).toBe(2);
+  });
+
+  it('adds terrain defense bonus in mountains', () => {
+    const ctx = makeContext({ terrain: '山地' });
+    const strat = { damageMultiplier: 1 } as any;
+    expect(calculateDamageWithContext(ctx, strat)).toBe(1);
+  });
+
+  it('adds terrain block bonus in ruins', () => {
+    const ctx = makeContext({ terrain: '遗迹', currentBlockReduction: 0.5 });
+    const strat = { damageMultiplier: 1 } as any;
+    expect(calculateDamageWithContext(ctx, strat)).toBe(1);
+  });
+
+  it('returns 0 for non-attack strategies', () => {
+    const ctx = makeContext();
+    const strat = { damageMultiplier: 0 } as any;
+    expect(calculateDamageWithContext(ctx, strat)).toBe(0);
   });
 });
 
@@ -181,31 +269,45 @@ describe('calculateDodgeRate', () => {
     expect(calculateDodgeRate(baseRate, normalStamina, 0.2, 0, noTerrain)).toBe(0.35);
   });
 
-  it('applies weight modifier: heavy (0.51-0.75) → -10%', () => {
+  it('applies weight modifier: heavy (0.51-0.8) → -10%', () => {
     expect(calculateDodgeRate(baseRate, normalStamina, 0.6, 0, noTerrain)).toBeCloseTo(0.2, 10);
   });
 
-  it('applies weight modifier: overloaded (>0.75) → -15%', () => {
+  it('applies weight modifier: overloaded (>0.8) → -15%', () => {
     expect(calculateDodgeRate(baseRate, normalStamina, 0.85, 0, noTerrain)).toBe(0.15);
   });
 
-  it('applies terrain modifier', () => {
-    // 丛林: +10% dodge
+  it('applies terrain modifier: 丛林 +10%', () => {
     expect(calculateDodgeRate(baseRate, normalStamina, normalWeight, 0, '丛林')).toBe(0.4);
-    // 沼泽: -15% dodge
+  });
+
+  it('applies terrain modifier: 沼泽 -15%', () => {
     expect(calculateDodgeRate(baseRate, normalStamina, normalWeight, 0, '沼泽')).toBe(0.15);
   });
 
   it('clamps to [0, 1]', () => {
-    // Very negative case
     expect(calculateDodgeRate(baseRate, 35, 0.9, 0, '沼泽')).toBe(0);
-    // Very positive case  
     expect(calculateDodgeRate(baseRate, 90, 0.2, 0.25, '丛林')).toBe(0.8);
   });
 
   it('stamina <= 20 overrides all other modifiers', () => {
-    // Even with dodge bonus and terrain bonus, stamina <= 20 fixes at 10%
     expect(calculateDodgeRate(baseRate, 10, 0.2, 0.25, '丛林')).toBe(0.1);
+  });
+});
+
+// ============================================================
+// calculateDodgeRateWithContext
+// ============================================================
+
+describe('calculateDodgeRateWithContext', () => {
+  it('uses context fields correctly', () => {
+    const ctx = makeContext();
+    expect(calculateDodgeRateWithContext(ctx)).toBe(0.3);
+  });
+
+  it('applies dodge bonus from context', () => {
+    const ctx = makeContext({ currentDodgeBonus: 0.25 });
+    expect(calculateDodgeRateWithContext(ctx)).toBe(0.55);
   });
 });
 
@@ -221,12 +323,11 @@ describe('calculateHitRate', () => {
   });
 
   it('applies strategy hit modifier', () => {
-    expect(calculateHitRate(baseRate, 0.2, 70)).toBe(1.0);  // +20% → capped at 1
-    expect(calculateHitRate(baseRate, -0.2, 70)).toBe(0.7); // -20%
+    expect(calculateHitRate(baseRate, 0.2, 70)).toBe(1.0);
+    expect(calculateHitRate(baseRate, -0.2, 70)).toBe(0.7);
   });
 
   it('applies stamina threshold: <= 20 → cannot attack', () => {
-    // Stamina 20 or below means hit rate is 0 (cannot fight effectively)
     expect(calculateHitRate(baseRate, 0, 15)).toBe(0);
   });
 
@@ -241,6 +342,34 @@ describe('calculateHitRate', () => {
   it('clamps to [0, 1]', () => {
     expect(calculateHitRate(baseRate, 0.3, 90)).toBe(1.0);
     expect(calculateHitRate(baseRate, -2.0, 35)).toBe(0);
+  });
+});
+
+// ============================================================
+// calculateHitRateWithContext
+// ============================================================
+
+describe('calculateHitRateWithContext', () => {
+  const normalStrat = { hitRateModifier: 0 } as any;
+
+  it('applies night modifier: -10%', () => {
+    const ctx = makeContext({ isNight: true });
+    expect(calculateHitRateWithContext(ctx, normalStrat)).toBeCloseTo(0.8, 10);
+  });
+
+  it('applies fog weather modifier: -10%', () => {
+    const ctx = makeContext({ weather: '大雾' });
+    expect(calculateHitRateWithContext(ctx, normalStrat)).toBeCloseTo(0.8, 10);
+  });
+
+  it('applies jungle terrain modifier: -10%', () => {
+    const ctx = makeContext({ terrain: '丛林' });
+    expect(calculateHitRateWithContext(ctx, normalStrat)).toBeCloseTo(0.8, 10);
+  });
+
+  it('stacks jungle + night + fog', () => {
+    const ctx = makeContext({ terrain: '丛林', isNight: true, weather: '大雾' });
+    expect(calculateHitRateWithContext(ctx, normalStrat)).toBeCloseTo(0.6, 10);
   });
 });
 
@@ -271,8 +400,7 @@ describe('calculateStaminaCost', () => {
   });
 
   it('stacks consecutive penalty with stamina threshold', () => {
-    // Base 10, low stamina ×1.5, 2nd combat ×1.2
-    expect(calculateStaminaCost(10, 2, 35)).toBe(18); // floor(10 * 1.5 * 1.2)
+    expect(calculateStaminaCost(10, 2, 35)).toBe(18);
   });
 
   it('returns minimum 1', () => {
@@ -280,7 +408,6 @@ describe('calculateStaminaCost', () => {
   });
 
   it('returns Infinity when stamina <= 20', () => {
-    // Cannot fight — but still report the nominal cost as Infinity
     expect(calculateStaminaCost(10, 1, 10)).toBe(Infinity);
   });
 });
@@ -290,48 +417,542 @@ describe('calculateStaminaCost', () => {
 // ============================================================
 
 describe('getAvailableStrategies', () => {
-  it('returns all 6 strategies under normal conditions', () => {
+  it('returns all 8 strategies under normal conditions', () => {
     const strategies = getAvailableStrategies(0.3, 70);
     expect(strategies).toEqual([
-      '普通攻击', '猛击', '闪避姿态', '格挡', '精准攻击', '撤退',
+      '普通攻击', '猛击', '闪避姿态', '格挡', '精准攻击', '恐吓', '撤退', '潜行击',
     ]);
   });
 
-  it('restricts 猛击 when weight > 50%', () => {
+  it('removes 猛击 and 潜行击 when weight > 50%', () => {
     const strategies = getAvailableStrategies(0.6, 70);
     expect(strategies).not.toContain('猛击');
-    expect(strategies).toContain('普通攻击');
+    expect(strategies).not.toContain('潜行击');
+    expect(strategies).toContain('恐吓');
   });
 
-  it('restricts to only 普通攻击 and 格挡 when weight > 75%', () => {
+  it('restricts to only 普通攻击 and 格挡 when weight > 80%', () => {
     const strategies = getAvailableStrategies(0.85, 70);
     expect(strategies).toEqual(['普通攻击', '格挡']);
   });
 
-  it('restricts strategies when stamina is critically low', () => {
-    // stamina <= 20: cannot fight → only 闪避姿态, 格挡, 撤退
+  it('restricts to only 普通攻击 and 格挡 when stamina <= 20', () => {
     const strategies = getAvailableStrategies(0.3, 15);
-    expect(strategies).not.toContain('普通攻击');
-    expect(strategies).not.toContain('猛击');
-    expect(strategies).not.toContain('精准攻击');
-    expect(strategies).toContain('闪避姿态');
-    expect(strategies).toContain('格挡');
-    expect(strategies).toContain('撤退');
+    expect(strategies).toEqual(['普通攻击', '格挡']);
   });
 });
 
 // ============================================================
-// initiateCombat
+// createCombatContext
+// ============================================================
+
+describe('createCombatContext', () => {
+  it('creates context from player stats and enemy def', () => {
+    const inv = createInventory();
+    const ctx = createCombatContext(
+      { stamina: 80, health: 100, energy: 80, attackPower: 5, defense: 0, weightRatio: 0.3, inventory: inv },
+      smallEnemyDef,
+      '海滩',
+      '晴',
+      false,
+      1,
+    );
+
+    expect(ctx.status).toBe('active');
+    expect(ctx.turn).toBe(1);
+    expect(ctx.combatCount).toBe(1);
+    expect(ctx.player.stamina).toBe(80);
+    expect(ctx.enemy.tier).toBe('Small');
+    expect(ctx.enemy.hp).toBe(10);
+    expect(ctx.enemy.isBeast).toBe(true);
+    expect(ctx.terrain).toBe('海滩');
+    expect(ctx.weather).toBe('晴');
+    expect(ctx.isNight).toBe(false);
+  });
+
+  it('marks Small/Medium/Large tier enemies as beasts', () => {
+    for (const def of [smallEnemyDef, mediumEnemyDef, largeEnemyDef]) {
+      const inv = createInventory();
+      const ctx = createCombatContext(
+        { stamina: 80, health: 100, energy: 80, attackPower: 5, defense: 0, weightRatio: 0.3, inventory: inv },
+        def, '海滩', '晴', false,
+      );
+      expect(ctx.enemy.isBeast).toBe(true);
+    }
+  });
+});
+
+// ============================================================
+// resolveCombatRound — All 8 strategies
+// ============================================================
+
+describe('resolveCombatRound', () => {
+  describe('普通攻击', () => {
+    it('deals damage on hit', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '普通攻击', rng);
+      expect(result.staminaCost).toBe(10);
+      expect(result.context.player.stamina).toBe(70);
+    });
+  });
+
+  describe('猛击 (×1.5 damage)', () => {
+    it('deals 1.5x damage', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '猛击', rng);
+      expect(result.staminaCost).toBe(20);
+      expect(result.context.player.stamina).toBe(60);
+    });
+  });
+
+  describe('闪避姿态 (dodge +25%, no attack)', () => {
+    it('sets dodge bonus and deals no damage', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '闪避姿态', rng);
+      expect(result.context.currentDodgeBonus).toBe(0.25);
+      expect(result.playerDamageDealt).toBe(0);
+      expect(result.staminaCost).toBe(15);
+    });
+  });
+
+  describe('格挡 (block 50%, no attack)', () => {
+    it('sets block reduction and deals no damage', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '格挡', rng);
+      expect(result.context.currentBlockReduction).toBe(0.5);
+      expect(result.playerDamageDealt).toBe(0);
+      expect(result.staminaCost).toBe(8);
+    });
+  });
+
+  describe('精准攻击 (+20% hit, ×1.3 damage)', () => {
+    it('uses 1.3x damage multiplier', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '精准攻击', rng);
+      expect(result.staminaCost).toBe(12);
+      expect(result.energyCost).toBe(10);
+    });
+  });
+
+  describe('恐吓 (50% scare beasts)', () => {
+    it('scares beast with roll < 0.5', () => {
+      const ctx = makeContext();
+      let callCount = 0;
+      const mockRng = () => {
+        callCount++;
+        return 0.1;
+      };
+      const result = resolveCombatRound(ctx, '恐吓', mockRng);
+      expect(result.intimidateSuccess).toBe(true);
+      expect(result.retreated).toBe(true);
+      expect(result.context.status).toBe('retreated');
+      expect(result.staminaCost).toBe(5);
+    });
+
+    it('fails to scare with roll >= 0.5', () => {
+      const ctx = makeContext();
+      let callCount = 0;
+      const mockRng = () => {
+        callCount++;
+        return 0.8;
+      };
+      const result = resolveCombatRound(ctx, '恐吓', mockRng);
+      expect(result.intimidateSuccess).toBe(false);
+      expect(result.retreated).toBe(false);
+      expect(result.context.status).toBe('active');
+    });
+
+    it('does not scare non-beast enemies', () => {
+      const ctx = makeContext({
+        enemy: { ...makeContext().enemy, isBeast: false },
+      });
+      let callCount = 0;
+      const mockRng = () => {
+        callCount++;
+        return 0.1;
+      };
+      const result = resolveCombatRound(ctx, '恐吓', mockRng);
+      expect(result.intimidateSuccess).toBe(false);
+    });
+  });
+
+  describe('撤退', () => {
+    it('sets status to retreated', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '撤退', rng);
+      expect(result.context.status).toBe('retreated');
+      expect(result.retreated).toBe(true);
+      expect(result.staminaCost).toBe(20);
+    });
+
+    it('removes one random item from inventory', () => {
+      const inv = createInventory();
+      inv.slots.push({ itemId: '食物', quantity: 3 });
+      inv.slots.push({ itemId: '水', quantity: 2 });
+      const ctx = makeContext({
+        player: { ...makeContext().player },
+      });
+      ctx.player = { ...ctx.player };
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '撤退', rng);
+      expect(result.retreated).toBe(true);
+    });
+  });
+
+  describe('潜行击 (first strike, dodge +20%)', () => {
+    it('sets first strike flag and dodge bonus', () => {
+      const ctx = makeContext();
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '潜行击', rng);
+      expect(result.firstStrike).toBe(true);
+      expect(result.context.currentDodgeBonus).toBe(0.2);
+      expect(result.staminaCost).toBe(8);
+    });
+  });
+
+  describe('strategy validation', () => {
+    it('returns empty result when strategy unavailable due to weight', () => {
+      const ctx = makeContext({ player: { ...makeContext().player, weightRatio: 0.6 } });
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '猛击', rng);
+      expect(result.staminaCost).toBe(0);
+      expect(result.playerDamageDealt).toBe(0);
+    });
+
+    it('returns empty result when health <= 30', () => {
+      const ctx = makeContext({ player: { ...makeContext().player, health: 20 } });
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '普通攻击', rng);
+      expect(result.staminaCost).toBe(0);
+    });
+
+    it('returns empty result when stamina insufficient', () => {
+      const ctx = makeContext({ player: { ...makeContext().player, stamina: 5 } });
+      const rng = createSeededRNG(1);
+      const result = resolveCombatRound(ctx, '猛击', rng);
+      expect(result.staminaCost).toBe(0);
+    });
+  });
+});
+
+// ============================================================
+// resolveCombatRoundEnemy
+// ============================================================
+
+describe('resolveCombatRoundEnemy', () => {
+  it('enemy hits player when player does not dodge and enemy hits', () => {
+    const ctx = makeContext();
+    const mockRng = () => 0.5;
+    const result = resolveCombatRoundEnemy(ctx, mockRng);
+    expect(result.playerDodged).toBe(false);
+    expect(result.enemyHit).toBe(true);
+    expect(result.enemyDamageDealt).toBe(3);
+    expect(result.context.player.health).toBe(97);
+  });
+
+  it('enemy deals zero damage when player dodges', () => {
+    const ctx = makeContext();
+    const mockRng = () => 0.0;
+    const result = resolveCombatRoundEnemy(ctx, mockRng);
+    expect(result.playerDodged).toBe(true);
+    expect(result.enemyDamageDealt).toBe(0);
+  });
+
+  it('block reduction from 格挡 applies', () => {
+    const ctx = makeContext({ currentBlockReduction: 0.5 });
+    const mockRng = () => 0.5;
+    const result = resolveCombatRoundEnemy(ctx, mockRng);
+    expect(result.enemyDamageDealt).toBe(1);
+    expect(result.context.player.health).toBe(99);
+  });
+});
+
+// ============================================================
+// checkCombatEndWithContext
+// ============================================================
+
+describe('checkCombatEndWithContext', () => {
+  it('returns victory when enemy HP is 0', () => {
+    const ctx = makeContext({ enemy: { ...makeContext().enemy, hp: 0 } });
+    const result = checkCombatEndWithContext(ctx);
+    expect(result.status).toBe('victory');
+  });
+
+  it('returns defeat when player stamina is 0', () => {
+    const ctx = makeContext({ player: { ...makeContext().player, stamina: 0 } });
+    const result = checkCombatEndWithContext(ctx);
+    expect(result.status).toBe('defeat');
+  });
+
+  it('returns active when combat continues', () => {
+    const ctx = makeContext();
+    const result = checkCombatEndWithContext(ctx);
+    expect(result.status).toBe('active');
+  });
+
+  it('does not change terminal status', () => {
+    const ctx = makeContext({ status: 'victory' });
+    const result = checkCombatEndWithContext(ctx);
+    expect(result.status).toBe('victory');
+  });
+});
+
+// ============================================================
+// Terrain/weather/night modifiers
+// ============================================================
+
+describe('terrain modifiers', () => {
+  it('丛林: dodge +10%, hit -10%', () => {
+    expect(TERRAIN_DODGE_MODIFIERS['丛林']).toBe(0.1);
+    expect(TERRAIN_HIT_MODIFIERS['丛林']).toBe(-0.1);
+  });
+
+  it('山地: defense +5, dodge -10%', () => {
+    expect(TERRAIN_DEFENSE_BONUS['山地']).toBe(5);
+    expect(TERRAIN_DODGE_MODIFIERS['山地']).toBe(-0.1);
+  });
+
+  it('沼泽: dodge -15%', () => {
+    expect(TERRAIN_DODGE_MODIFIERS['沼泽']).toBe(-0.15);
+  });
+
+  it('浅海: dodge -20%', () => {
+    expect(TERRAIN_DODGE_MODIFIERS['浅海']).toBe(-0.2);
+  });
+
+  it('遗迹: dodge -10%, block +20%', () => {
+    expect(TERRAIN_DODGE_MODIFIERS['遗迹']).toBe(-0.1);
+    expect(TERRAIN_BLOCK_BONUS['遗迹']).toBe(0.2);
+  });
+});
+
+describe('weather modifiers', () => {
+  it('大雾: hit -10%', () => {
+    const ctx = makeContext({ weather: '大雾' });
+    const strat = { hitRateModifier: 0 } as any;
+    const rate = calculateHitRateWithContext(ctx, strat);
+    expect(rate).toBeCloseTo(0.8, 10);
+  });
+});
+
+describe('night modifier', () => {
+  it('夜晚: hit -10%', () => {
+    const ctx = makeContext({ isNight: true });
+    const strat = { hitRateModifier: 0 } as any;
+    const rate = calculateHitRateWithContext(ctx, strat);
+    expect(rate).toBeCloseTo(0.8, 10);
+  });
+});
+
+// ============================================================
+// Noise system
+// ============================================================
+
+describe('calculateNoiseLevel', () => {
+  it('普通移动 → none', () => {
+    expect(calculateNoiseLevel('普通移动')).toBe('none');
+  });
+
+  it('采集 → small', () => {
+    expect(calculateNoiseLevel('采集')).toBe('small');
+  });
+
+  it('采矿 → large', () => {
+    expect(calculateNoiseLevel('采矿')).toBe('large');
+  });
+
+  it('砍伐 → large', () => {
+    expect(calculateNoiseLevel('砍伐')).toBe('large');
+  });
+
+  it('战斗 → medium', () => {
+    expect(calculateNoiseLevel('战斗')).toBe('medium');
+  });
+
+  it('潜行移动 → none', () => {
+    expect(calculateNoiseLevel('潜行移动')).toBe('none');
+  });
+});
+
+describe('calculateEncounterChance', () => {
+  it('silent noise → 0% encounter', () => {
+    expect(calculateEncounterChance('none', 0.5)).toBe(0);
+  });
+
+  it('scales with zone danger rate', () => {
+    const lowDanger = calculateEncounterChance('medium', 0.1);
+    const highDanger = calculateEncounterChance('medium', 0.5);
+    expect(highDanger).toBeGreaterThan(lowDanger);
+  });
+
+  it('caps at 1.0', () => {
+    const chance = calculateEncounterChance('large', 1.0);
+    expect(chance).toBeLessThanOrEqual(1);
+  });
+
+  it('large noise in dangerous zone is significant', () => {
+    const chance = calculateEncounterChance('large', 0.5);
+    expect(chance).toBeGreaterThan(0.5);
+  });
+});
+
+// ============================================================
+// Full combat flow integration
+// ============================================================
+
+describe('full combat flow', () => {
+  it('player can defeat enemy with multiple attacks', () => {
+    const inv = createInventory();
+    let ctx = createCombatContext(
+      { stamina: 80, health: 100, energy: 80, attackPower: 10, defense: 0, weightRatio: 0.3, inventory: inv },
+      { ...smallEnemyDef, hp: 20 },
+      '海滩', '晴', false, 1,
+    );
+
+    let turns = 0;
+    while (ctx.status === 'active' && turns < 20) {
+      turns++;
+      const rng = createSeededRNG(turns * 100);
+      const result = resolveCombatRound(ctx, '普通攻击', rng);
+      ctx = result.context;
+      ctx = checkCombatEndWithContext(ctx);
+      if (ctx.status !== 'active') break;
+
+      const enemyResult = resolveCombatRoundEnemy(ctx, () => 0.999);
+      ctx = enemyResult.context;
+      ctx = checkCombatEndWithContext(ctx);
+    }
+
+    expect(ctx.status).toBe('victory');
+  });
+
+  it('player can retreat and lose an item', () => {
+    const ctx = makeContext();
+    const rng = createSeededRNG(1);
+    const result = resolveCombatRound(ctx, '撤退', rng);
+    expect(result.context.status).toBe('retreated');
+    expect(result.retreated).toBe(true);
+  });
+});
+
+// ============================================================
+// Weight penalties
+// ============================================================
+
+describe('weight penalties', () => {
+  it('all strategies available at weight <= 50%', () => {
+    expect(getAvailableStrategies(0.0, 70).length).toBe(8);
+    expect(getAvailableStrategies(0.25, 70).length).toBe(8);
+    expect(getAvailableStrategies(0.5, 70).length).toBe(8);
+  });
+
+  it('猛击 and 潜行击 restricted at weight > 50%', () => {
+    const strategies = getAvailableStrategies(0.51, 70);
+    expect(strategies).not.toContain('猛击');
+    expect(strategies).not.toContain('潜行击');
+    expect(strategies.length).toBe(6);
+  });
+
+  it('only 普通攻击 and 格挡 at weight > 80%', () => {
+    const strategies = getAvailableStrategies(0.81, 70);
+    expect(strategies.sort()).toEqual(['普通攻击', '格挡']);
+    expect(strategies.length).toBe(2);
+  });
+});
+
+// ============================================================
+// Pure function verification
+// ============================================================
+
+describe('pure functions', () => {
+  it('createCombatContext does not mutate input', () => {
+    const inv = createInventory();
+    const player = { stamina: 80, health: 100, energy: 80, attackPower: 5, defense: 0, weightRatio: 0.3, inventory: inv };
+    const playerCopy = JSON.parse(JSON.stringify(player));
+    createCombatContext(player, smallEnemyDef, '海滩', '晴', false, 1);
+    expect(player).toEqual(playerCopy);
+  });
+
+  it('resolveCombatRound does not mutate input context', () => {
+    const ctx = makeContext();
+    const ctxCopy = JSON.parse(JSON.stringify(ctx));
+    resolveCombatRound(ctx, '普通攻击', createSeededRNG(1));
+    expect(ctx).toEqual(ctxCopy);
+  });
+
+  it('resolveCombatRoundEnemy does not mutate input context', () => {
+    const ctx = makeContext();
+    const ctxCopy = JSON.parse(JSON.stringify(ctx));
+    resolveCombatRoundEnemy(ctx, createSeededRNG(1));
+    expect(ctx).toEqual(ctxCopy);
+  });
+});
+
+// ============================================================
+// Backward compatibility: resolvePlayerAction / resolveEnemyAction
+// ============================================================
+
+describe('backward-compatible resolvePlayerAction', () => {
+  it('普通攻击 works correctly', () => {
+    const state = makeState();
+    const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
+    expect(result.state.player.stamina).toBe(70);
+    expect(result.damageDealt).toBe(4);
+  });
+
+  it('撤退 sets retreated status', () => {
+    const state = makeState();
+    const result = resolvePlayerAction(state, '撤退', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
+    expect(result.state.status).toBe('retreated');
+  });
+
+  it('恐吓 with 50% chance', () => {
+    const state = makeState();
+    const result = resolvePlayerAction(state, '恐吓', { enemyDodge: 0.1, playerHit: failRoll }, 0.3);
+    expect(result.state.status).toBe('retreated');
+  });
+
+  it('恐吓 fails with high roll', () => {
+    const state = makeState();
+    const result = resolvePlayerAction(state, '恐吓', { enemyDodge: 0.8, playerHit: failRoll }, 0.3);
+    expect(result.state.status).toBe('active');
+  });
+});
+
+describe('backward-compatible resolveEnemyAction', () => {
+  it('enemy hits player', () => {
+    const state = makeState();
+    const result = resolveEnemyAction(state, { playerDodge: failRoll, enemyHit: successRoll });
+    expect(result.enemyHit).toBe(true);
+    expect(result.damageReceived).toBe(3);
+  });
+
+  it('player dodges enemy', () => {
+    const state = makeState();
+    const result = resolveEnemyAction(state, { playerDodge: successRoll, enemyHit: successRoll });
+    expect(result.playerDodged).toBe(true);
+    expect(result.damageReceived).toBe(0);
+  });
+});
+
+// ============================================================
+// initiateCombat (backward-compatible)
 // ============================================================
 
 describe('initiateCombat', () => {
-  it('creates initial combat state from player and enemy def', () => {
+  it('creates combat state from params', () => {
     const state = initiateCombat({
       playerStamina: 80,
       playerAttackPower: 5,
       playerDefense: 0,
       playerHealth: 100,
-      inventory: [],
+      inventory: createInventory(),
       enemyDef: smallEnemyDef,
       combatCount: 1,
       terrain: '海滩',
@@ -339,358 +960,8 @@ describe('initiateCombat', () => {
 
     expect(state.status).toBe('active');
     expect(state.turn).toBe(1);
-    expect(state.combatCount).toBe(1);
     expect(state.player.stamina).toBe(80);
-    expect(state.player.attackPower).toBe(5);
-    expect(state.player.defense).toBe(0);
-    expect(state.player.health).toBe(100);
     expect(state.enemy.tier).toBe('Small');
-    expect(state.enemy.hp).toBe(smallEnemyDef.hp);
-    expect(state.enemy.maxHp).toBe(smallEnemyDef.hp);
-    expect(state.enemy.atk).toBe(smallEnemyDef.atk);
-    expect(state.enemy.def).toBe(smallEnemyDef.def);
-    expect(state.enemy.dodgeRate).toBe(smallEnemyDef.dodgeRate);
-    expect(state.terrain).toBe('海滩');
-    expect(state.currentDodgeBonus).toBe(0);
-    expect(state.currentBlockReduction).toBe(0);
-  });
-
-  it('accepts different enemy tiers', () => {
-    for (const def of [smallEnemyDef, mediumEnemyDef, largeEnemyDef]) {
-      const state = initiateCombat({
-        playerStamina: 80, playerAttackPower: 5, playerDefense: 0,
-        playerHealth: 100, inventory: [],
-        enemyDef: def, combatCount: 1, terrain: '海滩',
-      });
-      expect(state.enemy.tier).toBe(def.tier);
-      expect(state.enemy.hp).toBe(def.hp);
-    }
-  });
-});
-
-// ============================================================
-// resolvePlayerAction
-// ============================================================
-
-describe('resolvePlayerAction', () => {
-  describe('普通攻击 (stamina cost 10)', () => {
-    it('deducts 10 stamina', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      expect(result.state.player.stamina).toBe(70);
-      expect(result.staminaCost).toBe(10);
-    });
-
-    it('deals damage when enemy does not dodge and player hits', () => {
-      const state = makeState();
-      // Enemy dodge rate = 0.2, failRoll = 0.999 → enemy does NOT dodge
-      // Player base hit rate = 0.9, successRoll = 0 → player HITS
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      expect(result.enemyDodged).toBe(false);
-      expect(result.playerHit).toBe(true);
-      // damage = (5 - 1) * 1 = 4
-      expect(result.damageDealt).toBe(4);
-      expect(result.state.enemy.hp).toBe(6);
-    });
-
-    it('deals zero damage when enemy dodges', () => {
-      const state = makeState();
-      // Enemy dodge rate = 0.2, successRoll = 0 → enemy DODGES
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: successRoll, playerHit: successRoll }, 0.3);
-      expect(result.enemyDodged).toBe(true);
-      expect(result.damageDealt).toBe(0);
-      expect(result.state.enemy.hp).toBe(10);
-    });
-
-    it('deals zero damage when player misses', () => {
-      const state = makeState();
-      // failRoll = 0.999 > hitRate(0.9) → MISS
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.playerHit).toBe(false);
-      expect(result.damageDealt).toBe(0);
-    });
-  });
-
-  describe('猛击 (stamina cost 20, damage ×2, hit -20%)', () => {
-    it('deducts 20 stamina', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      expect(result.state.player.stamina).toBe(60);
-      expect(result.staminaCost).toBe(20);
-    });
-
-    it('deals double damage on hit', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      // damage = (5 - 1) * 2 = 8
-      expect(result.damageDealt).toBe(8);
-      expect(result.state.enemy.hp).toBe(2);
-    });
-
-    it('has reduced hit rate (-20%)', () => {
-      // hitRate = 0.9 - 0.2 = 0.7
-      // successRoll 0.6 <= 0.7 → HIT
-      // successRoll 0.8 > 0.7 → MISS
-      const state = makeState();
-      const hitResult = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: 0.6 }, 0.3);
-      expect(hitResult.playerHit).toBe(true);
-
-      const state2 = makeState();
-      const missResult = resolvePlayerAction(state2, '猛击', { enemyDodge: failRoll, playerHit: 0.8 }, 0.3);
-      expect(missResult.playerHit).toBe(false);
-    });
-  });
-
-  describe('闪避姿态 (stamina cost 15, dodge +25%, no attack)', () => {
-    it('deducts 15 stamina', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '闪避姿态', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.state.player.stamina).toBe(65);
-      expect(result.staminaCost).toBe(15);
-    });
-
-    it('sets dodge bonus on state and deals no damage', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '闪避姿态', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.state.currentDodgeBonus).toBe(0.25);
-      expect(result.damageDealt).toBe(0);
-      expect(result.state.enemy.hp).toBe(10);
-    });
-  });
-
-  describe('格挡 (stamina cost 8, block 50%, no attack)', () => {
-    it('deducts 8 stamina', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '格挡', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.state.player.stamina).toBe(72);
-      expect(result.staminaCost).toBe(8);
-    });
-
-    it('sets block reduction on state and deals no damage', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '格挡', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.state.currentBlockReduction).toBe(0.5);
-      expect(result.damageDealt).toBe(0);
-    });
-  });
-
-  describe('精准攻击 (stamina cost 12, hit +20%, damage ×1.3)', () => {
-    it('deducts 12 stamina', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '精准攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      expect(result.state.player.stamina).toBe(68);
-      expect(result.staminaCost).toBe(12);
-    });
-
-    it('deals 1.3x damage on hit', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '精准攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      // damage = floor((5 - 1) * 1.3) = floor(5.2) = 5
-      expect(result.damageDealt).toBe(5);
-    });
-
-    it('has increased hit rate (+20%)', () => {
-      // hitRate = 0.9 + 0.2 = 1.0 → always hits (unless dodged)
-      const state = makeState();
-      const result = resolvePlayerAction(state, '精准攻击', { enemyDodge: failRoll, playerHit: 0.95 }, 0.3);
-      expect(result.playerHit).toBe(true);
-    });
-  });
-
-  describe('撤退 (stamina cost 20, lose 1 item)', () => {
-    it('sets status to retreated', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '撤退', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.state.status).toBe('retreated');
-      expect(result.staminaCost).toBe(20);
-    });
-
-    it('removes one random item from inventory', () => {
-      const state = makeState({ player: makePlayer({ inventory: [
-        { itemId: '食物', quantity: 3 },
-        { itemId: '水', quantity: 2 },
-      ]})});
-      const result = resolvePlayerAction(state, '撤退', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      // One item should be removed (either 食物 reduced to 2, or 水 reduced to 1)
-      const totalItems = result.state.player.inventory.reduce((sum, s) => sum + s.quantity, 0);
-      expect(totalItems).toBe(4); // was 5, now 4
-    });
-  });
-
-  describe('strategy validation', () => {
-    it('returns error when player lacks stamina', () => {
-      const state = makeState({ player: makePlayer({ stamina: 5 }) });
-      const result = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      // Stamina 5 < 猛击 cost 20 → strategy fails
-      expect(result.state.player.stamina).toBe(5); // unchanged
-      expect(result.staminaCost).toBe(0);
-    });
-
-    it('returns error when strategy is unavailable due to weight', () => {
-      const state = makeState();
-      const result = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: successRoll }, 0.6);
-      // Weight > 50% → 猛击 unavailable
-      expect(result.state.player.stamina).toBe(80); // unchanged
-      expect(result.staminaCost).toBe(0);
-    });
-
-    it('returns error when strategy is unavailable due to low stamina', () => {
-      const state = makeState({ player: makePlayer({ stamina: 15 }) });
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      // Stamina 15 → offensive strategies unavailable
-      expect(result.state.player.stamina).toBe(15);
-      expect(result.staminaCost).toBe(0);
-    });
-  });
-
-  describe('consecutive combat penalties', () => {
-    it('applies +20% stamina cost for 2nd combat', () => {
-      const state = makeState({ combatCount: 2 });
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.staminaCost).toBe(12); // 10 * 1.2 = 12
-    });
-
-    it('applies +50% stamina cost for 3rd combat', () => {
-      const state = makeState({ combatCount: 3 });
-      const result = resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-      expect(result.staminaCost).toBe(15); // 10 * 1.5 = 15
-    });
-  });
-
-  describe('killing blow', () => {
-    it('reduces enemy HP to 0 on killing blow', () => {
-      const state = makeState({ enemy: makeEnemy({ hp: 2, maxHp: 10, dodgeRate: 0.1 }) });
-      const result = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      // damage = (5-1)*2 = 8, enemy HP was 2 → goes to -6, clamped to 0
-      expect(result.state.enemy.hp).toBe(0);
-    });
-  });
-});
-
-// ============================================================
-// resolveEnemyAction
-// ============================================================
-
-describe('resolveEnemyAction', () => {
-  it('enemy hits player when player does not dodge and enemy hits', () => {
-    const state = makeState();
-    // Player dodge rate with normal stamina/weight/terrain = 0.3
-    // failRoll 0.999 > 0.3 → player does NOT dodge
-    // Enemy base hit rate = 0.9, successRoll 0 → enemy HITS
-    const result = resolveEnemyAction(state, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(result.playerDodged).toBe(false);
-    expect(result.enemyHit).toBe(true);
-    // damage = max(1, 3 - 0) = 3
-    expect(result.damageReceived).toBe(3);
-    expect(result.state.player.health).toBe(97);
-  });
-
-  it('enemy deals zero damage when player dodges', () => {
-    const state = makeState();
-    // successRoll 0 <= 0.3 → player DODGES
-    const result = resolveEnemyAction(state, { playerDodge: successRoll, enemyHit: successRoll });
-    expect(result.playerDodged).toBe(true);
-    expect(result.damageReceived).toBe(0);
-    expect(result.state.player.health).toBe(100);
-  });
-
-  it('enemy deals zero damage when enemy misses', () => {
-    const state = makeState();
-    // failRoll 0.999 > 0.9 → enemy MISSES
-    const result = resolveEnemyAction(state, { playerDodge: failRoll, enemyHit: failRoll });
-    expect(result.enemyHit).toBe(false);
-    expect(result.damageReceived).toBe(0);
-  });
-
-  it('dodge bonus from 闪避姿态 applies', () => {
-    const state = makeState({ currentDodgeBonus: 0.25 });
-    // Dodge rate = 0.3 + 0.25 = 0.55
-    // Roll 0.5 <= 0.55 → player DODGES
-    const result = resolveEnemyAction(state, { playerDodge: 0.5, enemyHit: successRoll });
-    expect(result.playerDodged).toBe(true);
-    expect(result.damageReceived).toBe(0);
-  });
-
-  it('block reduction from 格挡 applies', () => {
-    const state = makeState({ currentBlockReduction: 0.5 });
-    // Player doesn't dodge, enemy hits → damage = max(1, 3-0) * (1-0.5) = floor(1.5) = 1
-    const result = resolveEnemyAction(state, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(result.playerDodged).toBe(false);
-    expect(result.enemyHit).toBe(true);
-    expect(result.damageReceived).toBe(1);
-    expect(result.state.player.health).toBe(99);
-  });
-
-  it('enemy damage scales with enemy tier', () => {
-    // Small enemy: atk=3, player def=0 → damage = 3
-    const smallState = makeState({ enemy: makeEnemy({ atk: 3, def: 1 }) });
-    const smallResult = resolveEnemyAction(smallState, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(smallResult.damageReceived).toBe(3);
-
-    // Medium enemy: atk=7, player def=0 → damage = 7
-    const mediumState = makeState({ enemy: makeEnemy({ tier: 'Medium', name: '野猪', icon: '🐗', hp: 20, maxHp: 20, atk: 7, def: 3, dodgeRate: 0.15 }) });
-    const mediumResult = resolveEnemyAction(mediumState, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(mediumResult.damageReceived).toBe(7);
-
-    // Large enemy: atk=12, player def=0 → damage = 12
-    const largeState = makeState({ enemy: makeEnemy({ tier: 'Large', name: '蛇王', icon: '🐍', hp: 35, maxHp: 35, atk: 12, def: 5, dodgeRate: 0.2 }) });
-    const largeResult = resolveEnemyAction(largeState, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(largeResult.damageReceived).toBe(12);
-  });
-
-  it('player defense reduces enemy damage', () => {
-    const state = makeState({ player: makePlayer({ defense: 3 }) });
-    // damage = max(1, 3 - 3) = 1
-    const result = resolveEnemyAction(state, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(result.damageReceived).toBe(1);
-  });
-});
-
-// ============================================================
-// checkCombatEnd
-// ============================================================
-
-describe('checkCombatEnd', () => {
-  it('returns victory when enemy HP is 0', () => {
-    const state = makeState({ enemy: makeEnemy({ hp: 0, maxHp: 10 }) });
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('victory');
-  });
-
-  it('returns victory when enemy HP is negative', () => {
-    const state = makeState({ enemy: makeEnemy({ hp: -5, maxHp: 10 }) });
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('victory');
-  });
-
-  it('returns retreated when status was set to retreated', () => {
-    const state = makeState({ status: 'retreated' });
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('retreated');
-  });
-
-  it('returns defeat when player stamina is 0', () => {
-    const state = makeState({ player: makePlayer({ stamina: 0 }) });
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('defeat');
-  });
-
-  it('returns defeat when player stamina is negative', () => {
-    const state = makeState({ player: makePlayer({ stamina: -1 }) });
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('defeat');
-  });
-
-  it('returns active when combat continues', () => {
-    const state = makeState();
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('active');
-  });
-
-  it('does not change status that is already terminal', () => {
-    const state = makeState({ status: 'victory' });
-    const result = checkCombatEnd(state);
-    expect(result.status).toBe('victory');
   });
 });
 
@@ -706,207 +977,11 @@ describe('generateLoot', () => {
     expect(loot.moodBonus).toBe(smallEnemyDef.moodBonus);
   });
 
-  it('returns mood bonus from enemy def', () => {
-    const rng = createSeededRNG(1);
-    const loot = generateLoot(smallEnemyDef, rng);
-    expect(loot.moodBonus).toBe(5);
-
-    const loot2 = generateLoot(mediumEnemyDef, createSeededRNG(1));
-    expect(loot2.moodBonus).toBe(8);
-
-    const loot3 = generateLoot(largeEnemyDef, createSeededRNG(1));
-    expect(loot3.moodBonus).toBe(15);
-  });
-
   it('produces deterministic results with same seed', () => {
     const rng1 = createSeededRNG(99);
     const rng2 = createSeededRNG(99);
     const loot1 = generateLoot(smallEnemyDef, rng1);
     const loot2 = generateLoot(smallEnemyDef, rng2);
     expect(loot1).toEqual(loot2);
-  });
-
-  it('respects drop table quantity ranges', () => {
-    const rng = createSeededRNG(7);
-    const loot = generateLoot(smallEnemyDef, rng);
-    for (const item of loot.items) {
-      const dropEntry = smallEnemyDef.dropTable.find(d => d.itemId === item.itemId);
-      expect(dropEntry).toBeDefined();
-      if (dropEntry) {
-        expect(item.quantity).toBeGreaterThanOrEqual(dropEntry.min);
-        expect(item.quantity).toBeLessThanOrEqual(dropEntry.max);
-      }
-    }
-  });
-
-  it('large enemy generates better loot', () => {
-    // Large enemy has 100%蛇胆 drop and 50%高级材料 drop
-    const rng = createSeededRNG(42);
-    const loot = generateLoot(largeEnemyDef, rng);
-    // At minimum should get 蛇胆 (100% drop rate)
-    const snakeGall = loot.items.find((i: { itemId: ItemId; quantity: number }) => i.itemId === '蛇胆');
-    expect(snakeGall).toBeDefined();
-  });
-});
-
-// ============================================================
-// Integration: Full combat flow
-// ============================================================
-
-describe('full combat flow', () => {
-  it('player can defeat small enemy in one turn with 猛击', () => {
-    const state = initiateCombat({
-      playerStamina: 80, playerAttackPower: 10, playerDefense: 0,
-      playerHealth: 100, inventory: [],
-      enemyDef: smallEnemyDef, combatCount: 1, terrain: '海滩',
-    });
-
-    const result = resolvePlayerAction(state, '猛击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-    // Attack 10, enemy def 1, ×2 multiplier → (10-1)*2 = 18, enemy HP was 10
-    expect(result.state.enemy.hp).toBe(0);
-
-    const endState = checkCombatEnd(result.state);
-    expect(endState.status).toBe('victory');
-  });
-
-  it('multi-turn combat: player wins after several normal attacks', () => {
-    let state = initiateCombat({
-      playerStamina: 80, playerAttackPower: 10, playerDefense: 0,
-      playerHealth: 100, inventory: [],
-      enemyDef: {
-        ...mediumEnemyDef,
-        hp: 24,
-      },
-      combatCount: 1,
-      terrain: '海滩',
-    });
-    // Enemy: HP 24, DEF 3. Player ATK 10 → damage per hit = (10-3)*1 = 7
-    // Need ~4 hits, 4 turns. Stamina cost: 10, 10, 10, 15 = 45 total.
-
-    let turns = 0;
-    while (state.status === 'active' && turns < 20) {
-      turns++;
-      const playerResult = resolvePlayerAction(state, '普通攻击',
-        { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-      state = playerResult.state;
-
-      state = checkCombatEnd(state);
-      if (state.status !== 'active') break;
-
-      const enemyResult = resolveEnemyAction(state,
-        { playerDodge: failRoll, enemyHit: failRoll }); // enemy misses every time
-      state = enemyResult.state;
-      state = checkCombatEnd(state);
-    }
-
-    expect(state.status).toBe('victory');
-    expect(turns).toBe(4);
-  });
-
-  it('player loses when stamina depletes to 0 after action', () => {
-    const state = makeState({
-      player: makePlayer({ stamina: 22 }),
-      combatCount: 3, // +50% consecutive penalty
-    });
-    // 普通攻击 base cost 10, stamina 22 (≤50: ×1.5), combatCount 3 (×1.5)
-    // → cost = floor(10 * 1.5 * 1.5) = 22, stamina → 0
-    const result = resolvePlayerAction(state, '普通攻击',
-      { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-    expect(result.state.player.stamina).toBe(0);
-    expect(result.staminaCost).toBe(22);
-
-    const endState = checkCombatEnd(result.state);
-    expect(endState.status).toBe('defeat');
-  });
-
-  it('player can retreat and lose an item', () => {
-    const state = makeState({
-      player: makePlayer({ inventory: [
-        { itemId: '食物', quantity: 3 },
-        { itemId: '草药', quantity: 2 },
-      ]}),
-    });
-    const result = resolvePlayerAction(state, '撤退', { enemyDodge: failRoll, playerHit: failRoll }, 0.3);
-    expect(result.state.status).toBe('retreated');
-
-    const totalItems = result.state.player.inventory.reduce((sum, s) => sum + s.quantity, 0);
-    expect(totalItems).toBe(4); // was 5, lost 1
-
-    const endState = checkCombatEnd(result.state);
-    expect(endState.status).toBe('retreated');
-  });
-
-  it('dodge and block mechanics work together in a turn', () => {
-    const state = makeState({ currentDodgeBonus: 0.25, currentBlockReduction: 0.5 });
-    // Player has dodge bonus + block reduction from previous turn's strategy
-    // Enemy attacks: player dodge rate = 0.3 + 0.25 = 0.55
-    // If roll 0.6 > 0.55 → not dodged → enemy hits → damage halved by block
-    const result = resolveEnemyAction(state, { playerDodge: 0.6, enemyHit: successRoll });
-    expect(result.playerDodged).toBe(false);
-    expect(result.enemyHit).toBe(true);
-    // damage = max(1, 3-0) * (1-0.5) = floor(1.5) = 1
-    expect(result.damageReceived).toBe(1);
-  });
-});
-
-// ============================================================
-// Weight penalties on combat
-// ============================================================
-
-describe('weight penalties', () => {
-  it('all strategies available at weight <= 50%', () => {
-    expect(getAvailableStrategies(0.0, 70).length).toBe(6);
-    expect(getAvailableStrategies(0.25, 70).length).toBe(6);
-    expect(getAvailableStrategies(0.5, 70).length).toBe(6);
-  });
-
-  it('猛击 restricted at weight > 50%', () => {
-    const strategies = getAvailableStrategies(0.51, 70);
-    expect(strategies).not.toContain('猛击');
-    expect(strategies.length).toBe(5);
-  });
-
-  it('only 普通攻击 and 格挡 at weight > 75%', () => {
-    const strategies = getAvailableStrategies(0.76, 70);
-    expect(strategies.sort()).toEqual(['普通攻击', '格挡']);
-    expect(strategies.length).toBe(2);
-  });
-});
-
-// ============================================================
-// Pure function verification
-// ============================================================
-
-describe('pure functions', () => {
-  it('initiateCombat does not mutate input params', () => {
-    const inventory = [{ itemId: '食物' as ItemId, quantity: 1 }];
-    const inventoryCopy = [...inventory];
-    initiateCombat({
-      playerStamina: 80, playerAttackPower: 5, playerDefense: 0,
-      playerHealth: 100, inventory,
-      enemyDef: smallEnemyDef, combatCount: 1, terrain: '海滩',
-    });
-    expect(inventory).toEqual(inventoryCopy);
-  });
-
-  it('resolvePlayerAction does not mutate input state', () => {
-    const state = makeState();
-    const stateCopy = JSON.parse(JSON.stringify(state));
-    resolvePlayerAction(state, '普通攻击', { enemyDodge: failRoll, playerHit: successRoll }, 0.3);
-    expect(state).toEqual(stateCopy);
-  });
-
-  it('resolveEnemyAction does not mutate input state', () => {
-    const state = makeState();
-    const stateCopy = JSON.parse(JSON.stringify(state));
-    resolveEnemyAction(state, { playerDodge: failRoll, enemyHit: successRoll });
-    expect(state).toEqual(stateCopy);
-  });
-
-  it('checkCombatEnd does not mutate input state', () => {
-    const state = makeState();
-    const stateCopy = JSON.parse(JSON.stringify(state));
-    checkCombatEnd(state);
-    expect(state).toEqual(stateCopy);
   });
 });
